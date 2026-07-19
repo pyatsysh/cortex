@@ -1,6 +1,6 @@
 # Cortex
 
-Cortex is a system monitor for the machine you train models on. It reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, connects to your TensorBoard alongside them, and lets nothing it measures leave the computer.
+Cortex is a lightweight system monitor for the machine you train models on. It reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, connects to your TensorBoard alongside them, and lets nothing it measures leave the computer.
 
 It is built in Rust on Tauri, so it ships as a native window instead of a bundled browser.
 
