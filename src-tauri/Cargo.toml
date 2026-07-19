@@ -1,0 +1,31 @@
+[package]
+name = "cortex"
+version = "0.1.0"
+description = "Cortex — a lightweight cross-platform system monitor"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.33"
+
+# NVIDIA GPU stats. Optional so the app still builds/runs on machines without NVML.
+# (utilisation + temperature come from NVML; AMD/Intel GPUs are a later phase.)
+nvml-wrapper = "0.10"
+
+# Windows only: live CPU clock (turbo) via PDH performance counters — the same
+# "base × % performance" figure Task Manager shows. No admin/driver needed.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Performance", "Win32_Foundation"] }
+
+[profile.release]
+opt-level = "s"     # optimise for size — this is a *monitor*, keep it small
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
