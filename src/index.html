@@ -66,9 +66,11 @@
     padding:16px 18px; position:relative; overflow:hidden}
   .card h3{font-size:13px; letter-spacing:.13em; color:var(--dim); font-weight:700; text-transform:uppercase}
   .board{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:6px; grid-auto-flow:row dense}
-  .board-card{display:flex; flex-direction:column; min-height:216px}
+  .board-card{display:flex; flex-direction:column; min-height:216px; cursor:grab}
   .board-card.span2{grid-column:span 2}
-  .board-card.dragging{opacity:.45; outline:1px dashed var(--pink); outline-offset:-2px}
+  .board-card.dragging{opacity:.5; outline:2px dashed var(--pink); outline-offset:-3px}
+  body.dragging-active{cursor:grabbing; user-select:none}
+  body.dragging-active *{cursor:grabbing !important}
   .card-head{display:flex; align-items:center; gap:8px; margin-bottom:2px}
   .card-head h3{flex:1}
   .card-head .drag{color:var(--faint); cursor:grab; font-size:13px; letter-spacing:1px; user-select:none}
@@ -426,7 +428,7 @@
   let order = load(LS_ORDER, DEFAULT_ORDER.slice(), Array.isArray) ;
   let hidden = new Set(load(LS_HIDDEN, [], Array.isArray));
   const cardEls = {};
-  let lastSig = "", dragKey = null;
+  let lastSig = "", isDragging = false;
   function load(key, def, ok){ try { const v = JSON.parse(localStorage.getItem(key)); return ok(v) ? v : def; } catch(_){ return def; } }
   function save(){ try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch(_){} }
 
@@ -438,26 +440,37 @@
     const def = defFor(k);
     const el = document.createElement("section");
     el.className = "card board-card" + (def.span>1?" span2":"");
-    el.dataset.key = k; el.draggable = true;
+    el.dataset.key = k;
     el.innerHTML = `<div class="card-head"><span class="drag" title="Drag to reorder">&#9776;</span><h3>${defTitle(k)}</h3><button class="close" title="Hide card">&times;</button></div><div class="card-body">${def.body}</div>`;
     el.querySelectorAll(".prog").forEach(p=>{ p.style.strokeDasharray=C; p.style.strokeDashoffset=C; });
     el.querySelector(".close").addEventListener("click", ()=>{ hidden.add(k); save(); if (cardEls[k]) cardEls[k].remove(); lastSig=""; updateAddMenu(); });
-    // drag to reorder; interacting with a control inside a card must not start a drag
-    el.addEventListener("dragstart", e=>{
-      if (e.target.closest("input,button,.switch,.mini,a")){ e.preventDefault(); return; }
-      dragKey=k; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",k); }catch(_){}
-    });
-    el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dragKey=null; syncOrderFromDOM(); });
-    el.addEventListener("dragover", e=>{
-      if (!dragKey || dragKey===k) return;
-      e.preventDefault(); e.dataTransfer.dropEffect="move";
-      const drag=cardEls[dragKey]; if (!drag) return;
-      const r=el.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; el.parentNode.insertBefore(drag, before?el:el.nextSibling);
-    });
-    el.addEventListener("drop", e=>{ e.preventDefault(); });
+    // pointer-based reorder (native HTML5 DnD is unreliable in WebView2)
+    el.addEventListener("pointerdown", e=>{ if (e.button!==0 || e.target.closest("input,button,.switch,.mini,a")) return; startDrag(el, e); });
     return el;
   }
   function syncOrderFromDOM(){ const vis=[...$("#board").children].map(c=>c.dataset.key); order = vis.concat(order.filter(k=>hidden.has(k))); save(); lastSig=""; }
+  function dragAfter(container, x, y){
+    const els = [...container.querySelectorAll(".board-card")].filter(c=>!c.classList.contains("dragging"));
+    let best = { dist: Infinity, el: null, before: true };
+    for (const el of els){
+      const r = el.getBoundingClientRect(), cx = r.left+r.width/2, cy = r.top+r.height/2, d = Math.hypot(x-cx, y-cy);
+      if (d < best.dist){ const before = (y < cy) || (Math.abs(y-cy) < r.height/2 && x < cx); best = { dist:d, el, before }; }
+    }
+    return best;
+  }
+  function startDrag(el, e){
+    const sx=e.clientX, sy=e.clientY, b=$("#board"); let active=false;
+    const move = ev => {
+      if (!active){ if (Math.hypot(ev.clientX-sx, ev.clientY-sy) < 5) return; active=true; isDragging=true; el.classList.add("dragging"); document.body.classList.add("dragging-active"); }
+      const a = dragAfter(b, ev.clientX, ev.clientY);
+      if (a.el && a.el !== el){ b.insertBefore(el, a.before ? a.el : a.el.nextSibling); }
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+      if (active){ el.classList.remove("dragging"); document.body.classList.remove("dragging-active"); isDragging=false; syncOrderFromDOM(); }
+    };
+    document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+  }
   function relayout(desired){
     const b = $("#board");
     order.forEach(k=>{
@@ -474,7 +487,7 @@
     const desired = new Set(desiredArr);
     order = order.filter(k=> !(k.startsWith("gpu") && !desired.has(k)) );
     const sig = order.join(",") + "|" + [...hidden].join(",") + "|" + gpuKeys.length;
-    if (sig !== lastSig){ relayout(desired); lastSig = sig; }
+    if (sig !== lastSig && !isDragging){ relayout(desired); lastSig = sig; }
     order.forEach(k=>{ if (!hidden.has(k) && desired.has(k) && cardEls[k]) defFor(k).update(cardEls[k], m); });
   }
 
@@ -491,7 +504,6 @@
   // ---- board delegated interactions (settings live inside a card) ----
   $("#board").addEventListener("input", e=>{ if (e.target.classList.contains("rateRange")){ intervalMs = +e.target.value; loop();
     document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); } });
-  $("#board").addEventListener("dragover", e=>{ e.preventDefault(); });
   $("#board").addEventListener("click", e=>{
     const sw = e.target.closest(".unitSwitch"); if (sw){ useC=!useC; if (last) boardUpdate(last); return; }
     const mn = e.target.closest(".mini"); if (mn){ mn.classList.toggle("on"); }
