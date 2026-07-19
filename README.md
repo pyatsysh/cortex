@@ -1,6 +1,6 @@
 # Cortex
 
-Cortex is a system monitor for the machine you train models on. It reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, keeps your TensorBoard in the same window, and lets nothing it measures leave the computer.
+Cortex is a system monitor for the machine you train models on. It reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, connects to your TensorBoard alongside them, and lets nothing it measures leave the computer.
 
 It is built in Rust on Tauri, so it ships as a native window instead of a bundled browser.
 
@@ -16,7 +16,7 @@ Cortex is the one window: GPU-first telemetry and your TensorBoard together, lig
 
 - **Every GPU, in full.** Each NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version (the first thing a framework checks). A four-GPU box gets four cards.
 - **Alive or stalled, at a glance.** The Training tab reads GPU utilisation continuously, so you can see whether the GPUs are working or the run has died before you open a single loss curve.
-- **TensorBoard, in the same window.** Point the Training tab at your local TensorBoard and it opens inside Cortex, next to the telemetry, instead of in yet another browser tab.
+- **Your TensorBoard, alongside.** The Training tab connects to the TensorBoard you run on localhost, so the training metrics live next to the hardware that produces them.
 - **Nothing leaves the box.** Cortex reads the operating system's counters and the NVIDIA driver, then draws them. The only address it will ever load is the TensorBoard server you name yourself, on localhost.
 
 ## What else it does
