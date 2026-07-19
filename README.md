@@ -1,105 +1,49 @@
-# Cortex — a lightweight, cross-platform system monitor
+# Cortex
 
-A vendor-neutral desktop system monitor with a premium *gaming-hub* aesthetic —
-inspired by the "System Vitals" screen of the HP OMEN Gaming Hub, but not tied to
-any hardware brand. Windows / Linux / macOS from one codebase.
+Cortex reads your machine and draws it. One small window tracks CPU, memory, disk, network and every NVIDIA GPU (utilisation, temperature, power, VRAM and clocks) on a board of cards you arrange yourself, and nothing it measures ever leaves the computer.
 
-> Status: **v0 scaffold.** The UI (Dashboard mode) is complete and previewable; the
-> Rust metrics backend is written but needs its first compile pass on a machine with
-> the Rust toolchain (see *Build* below).
+It is built in Rust on Tauri, so it ships as a native window instead of a bundled browser.
 
-## Why this exists
+> Status: built and tested so far only on Windows 11, developed under WSL. The Linux and macOS code paths are written and compile in principle but are unproven. See [Status](#status).
 
-The polished system monitors are single-OS (iStat Menus / `stats` on macOS,
-Rainmeter / HWiNFO on Windows, Mission Center / Conky on Linux). The cross-platform
-ones are terminal apps (btop, glances) or utilitarian. The tools that *look* like
-this are locked to vendor hardware (OMEN, Armoury Crate, iCUE). Cortex aims at the
-gap: **cross-platform + lightweight + looks like premium gaming software + open.**
+## Why it exists
 
-## Design goals
+The system monitors that look good run on one operating system: iStat Menus and `stats` on macOS, HWiNFO and Rainmeter on Windows, Mission Center and Conky on Linux. The ones that run everywhere are terminal programs (btop, glances) or server dashboards (Netdata). The ones that look like gaming software are locked to the vendor's own hardware. The middle is empty: one lightweight, cross-platform window that treats the GPU as a first-class part and phones nobody.
 
-1. **Lightweight** — Tauri (native OS webview, no bundled Chromium). Small binary,
-   low RAM. Release profile is size-optimised.
-2. **Looks cool** — pixel-matched to the OMEN "System Vitals" dashboard: magenta→purple
-   ring gauges, pink→orange storage bars, dark neon panels. Built with SVG + CSS.
-3. **Cross-platform** — Windows, Linux, macOS via Tauri v2 + the `sysinfo` crate.
-4. **Unique** — see *Why this exists*.
-5. **Easy to install** — Tauri emits native installers per OS (see *Distribution*).
+Cortex is that window.
 
-## Stack
+## What it does
 
-| Layer | Choice |
-|-------|--------|
-| Shell | Tauri v2 (Rust) |
-| Metrics | `sysinfo` (CPU/RAM/disk/net/processes/temps) + `nvml-wrapper` (NVIDIA GPU) |
-| Frontend | Single self-contained `src/index.html` (SVG/CSS/JS), no bundler |
+- **It leaves nothing behind.** The gaming hub it replaces measured 863 MB across 15 background processes on the same machine, and those processes run whether or not you open the app. Cortex registers no background services: close the window and nothing of it is left running.
+- **It says nothing to the network.** It reads the operating system's own counters and the NVIDIA driver, then draws them. The only address it will ever load is a TensorBoard server you point it at yourself, on localhost.
+- **It puts the GPU first.** Every NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version. Two GPUs give two cards, four give four.
+- **It rearranges to fit your head.** Cards move, hide and drop into empty slots on a grid; the layout is saved between sessions. Keep the cards you read, close the ones you do not.
+- **It watches training runs.** A Training tab embeds TensorBoard once you connect it, and when nothing is connected it still reports whether the GPU is working or idle.
+- **It has three depths.** A dashboard of ring gauges, a detailed view with per-core tables and live charts, and a system-information sheet you can copy or print.
 
-The frontend auto-detects its host: inside Tauri it calls the `get_metrics` command
-for **live** data; opened in a plain browser it animates **demo** data (so the look
-can be reviewed with zero build).
+## Status
 
-## Project layout
+So far Cortex has been built and run only on **Windows 11**, developed under WSL. The Linux and macOS paths are written and should compile, but they have not been built or tested, so treat them as unproven. Two known gaps on Windows: CPU temperature needs a sensor helper and reads `--` until one is added, and GPU coverage is NVIDIA-only through NVML (AMD and Intel are not read yet).
 
-```
-System_Monitor/
-├── src/index.html          # the whole UI (Dashboard mode) — live-or-demo
-├── src-tauri/
-│   ├── src/main.rs         # get_metrics command: sysinfo + NVML
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   ├── capabilities/       # window permissions
-│   └── icons/              # generated app icons (from cortex-icon.png)
-├── cortex-icon.png            # source icon; regenerate the set with `npm run icon`
-└── package.json
-```
+## Build
 
-## Build & run (Windows — primary target)
-
-Prerequisites:
-1. **Rust** (MSVC toolchain): install from <https://rustup.rs>.
-2. **Microsoft C++ Build Tools** (Visual Studio Build Tools → "Desktop development with C++").
-3. **WebView2** — already present on Windows 10/11.
-4. **Node.js** (for the Tauri CLI).
-
-Then:
+Prerequisites: the Rust MSVC toolchain (<https://rustup.rs>), the Visual C++ build tools, Node.js, and WebView2 (already present on Windows 10/11).
 
 ```bash
 npm install
 npm run dev      # hot-reloading dev window
-npm run build    # produces installers in src-tauri/target/release/bundle/
+npm run build    # native installers under src-tauri/target/release/bundle/
 ```
 
-> First compile pulls & builds the Rust crates (a few minutes). If `sysinfo`'s API
-> has drifted from what `main.rs` expects, paste the compiler error — the fixes are
-> small and version-local.
-
-### Linux / macOS
-
-Same flow. Linux additionally needs `webkit2gtk` + `libappindicator` dev packages
-(see the Tauri prerequisites page). Note: plain WSL can't display GUI windows without
-WSLg — build/run on a native desktop.
-
-## What's live vs. hard (the honest scope)
-
-- **Portable, no privileges:** CPU%, RAM, disk usage, network up/down, top processes. ✅
-- **NVIDIA GPU** util/temp via NVML (no admin). ✅ AMD/Intel GPUs: later phase.
-- **Temperatures:** Linux (`hwmon`) and macOS (SMC) work; **Windows CPU temp needs a
-  sensor driver** and is shown as `--` until a helper is added. This is the one genuinely
-  hard cross-platform bit and is deliberately deferred.
-- Out of scope (vendor hardware control, not monitoring): fan control, overclocking, RGB.
-
-## Distribution (requirement 5)
-
-Tauri's bundler emits, from this one codebase:
-
-- **Windows:** `.msi` + NSIS `.exe`
-- **macOS:** `.dmg` / `.app` (notarise for Gatekeeper)
-- **Linux:** `.AppImage` (portable) + `.deb` / `.rpm`
-
-Later: `winget`, `brew --cask`, Flathub, AUR; plus Tauri's built-in auto-updater.
+The full Windows walkthrough is in [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
 
 ## Roadmap
 
-- **v1 (now):** styled Dashboard on portable metrics + NVIDIA GPU.
-- **v2:** Detailed mode (per-core tables + live line charts) and Info mode.
-- **v3:** Windows sensor helper (LibreHardwareMonitor-style) for CPU/mobo temps; tray + always-on-top.
+- **Now:** the card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab.
+- **Next:** Windows CPU and motherboard temperature through a sensor helper; per-process VRAM (which process owns the GPU); alerts for imminent VRAM exhaustion, thermal throttling and stalled runs.
+- **Then:** AMD and Intel GPUs; native ingestion of TensorBoard scalar files so loss curves sit beside the telemetry; remote monitoring of a headless training box over the network.
+- **Eventually:** real Linux and macOS builds, and one-line installs (`winget`, `brew`, Flathub).
+
+## Licence
+
+MIT.
