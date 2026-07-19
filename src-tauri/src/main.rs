@@ -42,6 +42,7 @@ struct SysInfo {
     cpu_mhz: u64,
     gpu: String,
     gpu_driver: String,
+    cuda: String, // CUDA driver version, e.g. "12.4"
     ram_total: f32, // GB
     uptime: u64,    // seconds
     arch: String,
@@ -262,7 +263,7 @@ fn get_sysinfo(state: State<Mutex<AppState>>) -> SysInfo {
     let s = state.lock().unwrap();
     let cpu0 = s.sys.cpus().first();
 
-    let (gpu, gpu_driver) = match &s.nvml {
+    let (gpu, gpu_driver, cuda) = match &s.nvml {
         Some(nvml) => {
             let name = nvml
                 .device_by_index(0)
@@ -270,9 +271,15 @@ fn get_sysinfo(state: State<Mutex<AppState>>) -> SysInfo {
                 .and_then(|d| d.name().ok())
                 .unwrap_or_else(|| "—".into());
             let driver = nvml.sys_driver_version().unwrap_or_else(|_| "—".into());
-            (name, driver)
+            // NVML reports CUDA as an int like 12040 => "12.4"
+            let cuda = nvml
+                .sys_cuda_driver_version()
+                .ok()
+                .map(|v| format!("{}.{}", v / 1000, (v % 1000) / 10))
+                .unwrap_or_else(|| "—".into());
+            (name, driver, cuda)
         }
-        None => ("—".into(), "—".into()),
+        None => ("—".into(), "—".into(), "—".into()),
     };
 
     SysInfo {
@@ -284,6 +291,7 @@ fn get_sysinfo(state: State<Mutex<AppState>>) -> SysInfo {
         cpu_mhz: cpu0.map(|c| c.frequency()).unwrap_or(0),
         gpu,
         gpu_driver,
+        cuda,
         ram_total: (s.sys.total_memory() as f64 / GIB) as f32,
         uptime: System::uptime(),
         arch: std::env::consts::ARCH.to_string(),
