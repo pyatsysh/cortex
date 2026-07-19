@@ -4,6 +4,8 @@ Cortex is a system monitor for the machine you train models on. It reads your ma
 
 It is built in Rust on Tauri, so it ships as a native window instead of a bundled browser.
 
+Homepage: <https://pyatsysh.github.io/cortex/>
+
 > Status: built and tested so far only on Windows 11, developed under WSL. The Linux and macOS code paths are written and compile in principle but are unproven. See [Status](#status).
 
 ## Why it exists
