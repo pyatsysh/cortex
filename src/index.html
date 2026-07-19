@@ -65,7 +65,7 @@
   .card{background:linear-gradient(180deg, var(--card), #2A303B); border:1px solid var(--line); border-radius:var(--radius);
     padding:16px 18px; position:relative; overflow:hidden}
   .card h3{font-size:13px; letter-spacing:.13em; color:var(--dim); font-weight:700; text-transform:uppercase}
-  .board{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:252px; gap:14px; margin-top:6px}
+  .board{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:minmax(252px,auto); gap:14px; margin-top:6px}
   .board-card{display:flex; flex-direction:column; overflow:hidden}
   .board-card.span2{grid-column:span 2}
   /* move mode: click a card's handle, then click a target card to swap */
@@ -99,7 +99,8 @@
   .temp .t{font-size:21px; font-weight:800; font-variant-numeric:tabular-nums}
   .temp .tl{font-size:11.5px; color:var(--faint)}
   .subline{font-size:13px; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:2px}
-  .gline{margin-top:8px; font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums}
+  .gline{margin-top:8px; font-size:12px; line-height:1.4; color:var(--dim); font-variant-numeric:tabular-nums;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .gline b{color:var(--txt); font-weight:600}
 
   /* storage */
@@ -143,13 +144,14 @@
   .up .dot{background:var(--pink)} .down .dot{background:var(--purple)}
 
   /* processes */
-  table{width:100%; border-collapse:collapse; margin-top:6px}
-  th{font-size:11px; letter-spacing:.08em; color:var(--faint); text-transform:uppercase; text-align:right; font-weight:600; padding:6px 8px}
-  th.l{text-align:left} td{padding:6px 8px; font-size:13.5px; text-align:right; font-variant-numeric:tabular-nums; border-top:1px solid var(--line)}
-  td.l{text-align:left; color:var(--dim)}
-  .proc{display:flex; align-items:center; gap:11px}
-  .chip{width:24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:12px; font-weight:800; color:#2E3440; flex:none}
-  .proc .nm{color:var(--txt)}
+  table{width:100%; border-collapse:collapse; margin-top:6px; table-layout:fixed}
+  th{font-size:11px; letter-spacing:.08em; color:var(--faint); text-transform:uppercase; text-align:right; font-weight:600; padding:6px 6px}
+  th.l{text-align:left} td{padding:6px 6px; font-size:13.5px; text-align:right; font-variant-numeric:tabular-nums; border-top:1px solid var(--line)}
+  td.l{text-align:left; color:var(--dim); overflow:hidden}
+  .pcpu{width:44px} .pram{width:66px}
+  .proc{display:flex; align-items:center; gap:8px; min-width:0}
+  .chip{width:20px; height:20px; border-radius:6px; display:grid; place-items:center; font-size:11px; font-weight:800; color:#2E3440; flex:none}
+  .proc .nm{color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
   .kill{width:26px; height:26px; border-radius:7px; border:1px solid var(--line); background:var(--card-inset); color:var(--dim); cursor:pointer; display:inline-grid; place-items:center}
   .kill:hover{color:var(--red); border-color:rgba(191,97,106,.5)}
 
@@ -425,9 +427,10 @@
     ram: { title:"RAM", span:1, body: ringSVG("ram") + `<div class="subline rtext">-- / -- GB</div>`,
       update(el,m){ updateRing(el, m.ram.util); el.querySelector(".rtext").textContent = `${m.ram.used.toFixed(1)} / ${m.ram.total.toFixed(1)} GB`; } },
     storage: { title:"Storage", span:1, body: `<div class="drives"></div>`,
-      update(el,m){ el.querySelector(".drives").innerHTML = m.disks.map(d=>{ const up=100*(1-d.free/d.total);
-        return `<div class="drive"><div class="row"><div class="lbl">${d.name}</div><div class="bar"><i style="width:${up.toFixed(1)}%"></i></div></div>
-        <div class="free">${fmtGB(d.free)} free of ${fmtGB(d.total)}</div></div>`; }).join(""); } },
+      update(el,m){ const box=el.querySelector(".drives"); box.innerHTML = m.disks.map(d=>{ const up=100*(1-d.free/d.total);
+        return `<div class="drive"><div class="row"><div class="lbl">${d.name}</div><div class="bar"><i data-w="${up.toFixed(1)}"></i></div></div>
+        <div class="free">${fmtGB(d.free)} free of ${fmtGB(d.total)}</div></div>`; }).join("");
+        box.querySelectorAll(".bar > i").forEach(i=>{ i.style.width = i.dataset.w + "%"; }); } },  // width via JS (CSP strips inline style attrs)
     network: { title:"Network", span:1, body: `<div class="net">
       <div class="nrow up"><div class="big nu">0.0</div><div class="meta"><span class="u"><span class="dot"></span>Upload</span><small>Mbps</small></div></div>
       <div class="nrow down"><div class="big nd">0.0</div><div class="meta"><span class="u"><span class="dot"></span>Download</span><small>Mbps</small></div></div></div>`,
@@ -445,10 +448,12 @@
         const rr=el.querySelector(".rateRange"); if (document.activeElement!==rr) rr.value=intervalMs;
         el.querySelector(".rateVal").textContent=(intervalMs/1000).toFixed(1)+"s";
         el.querySelector(".aot").classList.toggle("on", aotOn); } },
-    procs: { title:"Top Processes", span:2, body: `<table><thead><tr><th class="l">Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
+    procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th class="pcpu">CPU</th><th class="pram">RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
       update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
-        <td class="l"><div class="proc"><span class="chip" style="background:${p.color}">${(p.name[0]||"?").toUpperCase()}</span><span class="nm">${p.name}</span></div></td>
-        <td>${p.cpu.toFixed(0)}%</td><td>${p.ram}MB</td></tr>`).join(""); } },
+        <td class="l"><div class="proc"><span class="chip">${(p.name[0]||"?").toUpperCase()}</span><span class="nm" title="${p.name}">${p.name}</span></div></td>
+        <td class="pcpu">${p.cpu.toFixed(0)}%</td><td class="pram">${p.ram}MB</td></tr>`).join("");
+        // chip colours via JS: the app CSP strips inline style="" attrs added through innerHTML
+        el.querySelectorAll(".ptb .chip").forEach((c,i)=>{ if(m.procs[i]) c.style.background = m.procs[i].color; }); } },
   };
   const STATIC_KEYS = ["cpu","ram","storage","network","settings","procs"];
   const gpuDef = i => ({ span:1, key:`gpu${i}`,
@@ -568,8 +573,12 @@
     $("#d-cpu-util").textContent = m.cpu.util.toFixed(1) + "%";
     $("#d-cpu-temp").textContent = showTemp(m.cpu.temp); $("#d-cpu-temp").style.color = tempColor(m.cpu.temp);
     $("#d-cpu-threads").textContent = m.cores.length;
-    $("#d-cores").innerHTML = m.cores.map((c,i)=>{ const u=clamp(c.util);
-      return `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i style="width:${u.toFixed(0)}%"></i></span><b>${Math.round(c.freq)} MHz</b><b>${c.util.toFixed(0)}%</b></div>`; }).join("");
+    $("#d-cores").innerHTML = m.cores.map((c,i)=>
+      `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i></i></span><b>${Math.round(c.freq)} MHz</b><b>${c.util.toFixed(0)}%</b></div>`).join("");
+    // Set bar widths via JS property, not an inline style="" attr: the app's CSP makes Tauri
+    // inject a style nonce, which disables 'unsafe-inline', so inline styles added through
+    // innerHTML get stripped and the bar defaults to 100%. JS-set styles aren't CSP-gated.
+    $("#d-cores").querySelectorAll(".cbar > i").forEach((el,i)=>{ el.style.width = clamp(m.cores[i].util).toFixed(0) + "%"; });
     const g = (m.gpus && m.gpus[0]) || {}, na = g.util == null;
     $("#d-gpu-name").textContent = g.name || "—";
     $("#d-gpu-cc").textContent = g.clock_core != null ? g.clock_core + " MHz" : "—";
