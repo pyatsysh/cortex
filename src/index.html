@@ -65,7 +65,7 @@
   .card{background:linear-gradient(180deg, var(--card), #2A303B); border:1px solid var(--line); border-radius:var(--radius);
     padding:16px 18px; position:relative; overflow:hidden}
   .card h3{font-size:13px; letter-spacing:.13em; color:var(--dim); font-weight:700; text-transform:uppercase}
-  .board{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:232px; gap:14px; margin-top:6px}
+  .board{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:252px; gap:14px; margin-top:6px}
   .board-card{display:flex; flex-direction:column; overflow:hidden}
   .board-card.span2{grid-column:span 2}
   /* move mode: click a card's handle, then click a target card to swap */
@@ -73,6 +73,8 @@
   .board.picking .board-card *{pointer-events:none}
   .board.picking .board-card.picked{outline:2px solid var(--pink); box-shadow:0 0 0 3px rgba(136,192,208,.15)}
   .board.picking .board-card:not(.picked):hover{outline:2px solid var(--pink); background:rgba(136,192,208,.06)}
+  .slot{border:2px dashed rgba(136,192,208,.35); border-radius:var(--radius); background:rgba(136,192,208,.04); cursor:pointer}
+  .slot:hover{border-color:var(--pink); background:rgba(136,192,208,.1)}
   .card-head{display:flex; align-items:center; gap:8px; margin-bottom:2px}
   .card-head h3{flex:1}
   .card-head .drag{color:var(--faint); cursor:pointer; font-size:14px; user-select:none}
@@ -80,7 +82,7 @@
   .card-head .close{background:transparent; border:0; color:var(--faint); font-size:17px; line-height:1; cursor:pointer;
     width:22px; height:22px; border-radius:6px; display:grid; place-items:center}
   .card-head .close:hover{color:var(--red); background:var(--card-inset)}
-  .card-body{flex:1; display:flex; flex-direction:column}
+  .card-body{flex:1; display:flex; flex-direction:column; overflow:auto}
 
   /* rings */
   .ringwrap{flex:1; display:grid; place-items:center; position:relative; margin:4px 0}
@@ -141,7 +143,7 @@
   /* processes */
   table{width:100%; border-collapse:collapse; margin-top:6px}
   th{font-size:11px; letter-spacing:.08em; color:var(--faint); text-transform:uppercase; text-align:right; font-weight:600; padding:6px 8px}
-  th.l{text-align:left} td{padding:8px; font-size:13.5px; text-align:right; font-variant-numeric:tabular-nums; border-top:1px solid var(--line)}
+  th.l{text-align:left} td{padding:6px 8px; font-size:13.5px; text-align:right; font-variant-numeric:tabular-nums; border-top:1px solid var(--line)}
   td.l{text-align:left; color:var(--dim)}
   .proc{display:flex; align-items:center; gap:11px}
   .chip{width:24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:12px; font-weight:800; color:#2E3440; flex:none}
@@ -197,8 +199,8 @@
   .tb-hint{margin-top:6px; font-size:13px; color:var(--faint)}
   .tb-frame{width:100%; height:calc(100vh - 132px); border:1px solid var(--line); border-radius:10px; margin-top:12px; background:#fff}
 
-  @media (max-width:1000px){ .board{grid-template-columns:repeat(2,1fr)} .dcols{grid-template-columns:1fr} .inficols{grid-template-columns:1fr} }
-  @media (max-width:620px){ .board{grid-template-columns:1fr} .board-card.span2{grid-column:span 1} .modes{margin-left:0} }
+  @media (max-width:1000px){ .dcols{grid-template-columns:1fr} .inficols{grid-template-columns:1fr} }
+  @media (max-width:620px){ .modes{margin-left:0} }
   @media (prefers-reduced-motion:reduce){ .ring .prog,.bar>i{transition:none} }
   @media print{ .topbar,.infbar,.modes{display:none} body{background:#fff; color:#000} }
 </style>
@@ -439,11 +441,10 @@
         el.querySelector(".uC").classList.toggle("on",useC); el.querySelector(".uF").classList.toggle("on",!useC);
         const rr=el.querySelector(".rateRange"); if (document.activeElement!==rr) rr.value=intervalMs;
         el.querySelector(".rateVal").textContent=(intervalMs/1000).toFixed(1)+"s"; } },
-    procs: { title:"Top Processes", span:2, body: `<table><thead><tr><th class="l">Name</th><th>CPU</th><th>GPU</th><th>RAM</th><th>Action</th></tr></thead><tbody class="ptb"></tbody></table>`,
-      update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.map(p=>`<tr>
+    procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
+      update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
         <td class="l"><div class="proc"><span class="chip" style="background:${p.color}">${(p.name[0]||"?").toUpperCase()}</span><span class="nm">${p.name}</span></div></td>
-        <td>${p.cpu.toFixed(0)}%</td><td>${p.gpu.toFixed(0)}%</td><td>${p.ram}MB</td>
-        <td><button class="kill" title="End task">⊘</button></td></tr>`).join(""); } },
+        <td>${p.cpu.toFixed(0)}%</td><td>${p.ram}MB</td></tr>`).join(""); } },
   };
   const STATIC_KEYS = ["cpu","ram","storage","network","settings","procs"];
   const gpuDef = i => ({ span:1, key:`gpu${i}`,
@@ -458,60 +459,72 @@
   function defFor(k){ return k.startsWith("gpu") ? gpuDef(parseInt(k.slice(3))) : CARD_DEFS[k]; }
   function defTitle(k){ if (k.startsWith("gpu")){ const c=(last&&last.gpus?last.gpus.length:1); return c>1?`GPU ${parseInt(k.slice(3))}`:"GPU"; } return CARD_DEFS[k].title; }
 
-  // ==== board manager ====
-  const DEFAULT_ORDER = ["gpu0","cpu","ram","storage","network","settings","procs"];
-  const LS_ORDER = "cortex.order", LS_HIDDEN = "cortex.hidden";
-  let order = load(LS_ORDER, DEFAULT_ORDER.slice(), Array.isArray) ;
+  // ==== board manager (positional 4-column slot grid; supports empty slots) ====
+  const COLS = 4;
+  const DEFAULT_LAYOUT = { gpu0:0, cpu:1, ram:2, storage:3, network:4, settings:5, procs:6 };
+  const LS_LAYOUT = "cortex.layout", LS_HIDDEN = "cortex.hidden";
+  let layout = load(LS_LAYOUT, {...DEFAULT_LAYOUT}, v => v && typeof v === "object" && !Array.isArray(v));
   let hidden = new Set(load(LS_HIDDEN, [], Array.isArray));
   const cardEls = {};
   let lastSig = "", pickMode = null;
   function load(key, def, ok){ try { const v = JSON.parse(localStorage.getItem(key)); return ok(v) ? v : def; } catch(_){ return def; } }
-  function save(){ try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch(_){} }
+  function save(){ try { localStorage.setItem(LS_LAYOUT, JSON.stringify(layout)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch(_){} }
 
-  function insertKey(k){
-    if (k.startsWith("gpu")){ const i=parseInt(k.slice(3)); const pi=order.indexOf(`gpu${i-1}`); if (pi>=0) order.splice(pi+1,0,k); else order.unshift(k); }
-    else order.push(k);
-  }
   function createCard(k){
-    const def = defFor(k);
     const el = document.createElement("section");
-    el.className = "card board-card" + (def.span>1?" span2":"");
-    el.dataset.key = k;
-    el.innerHTML = `<div class="card-head"><span class="drag" title="Drag to reorder">&#9776;</span><h3>${defTitle(k)}</h3><button class="close" title="Hide card">&times;</button></div><div class="card-body">${def.body}</div>`;
+    el.className = "card board-card"; el.dataset.key = k;
+    el.innerHTML = `<div class="card-head"><span class="drag" title="Move: click, then pick a slot">&#9776;</span><h3>${defTitle(k)}</h3><button class="close" title="Hide card">&times;</button></div><div class="card-body">${defFor(k).body}</div>`;
     el.querySelectorAll(".prog").forEach(p=>{ p.style.strokeDasharray=C; p.style.strokeDashoffset=C; });
-    el.querySelector(".close").addEventListener("click", ()=>{ hidden.add(k); save(); if (cardEls[k]) cardEls[k].remove(); lastSig=""; updateAddMenu(); });
-    // click the move handle, then click a target card to swap positions
+    el.querySelector(".close").addEventListener("click", ()=>{ hidden.add(k); save(); lastSig=""; if (pickMode) exitPick(); else if (last) boardUpdate(last); });
     el.querySelector(".drag").addEventListener("click", e=>{ e.stopPropagation(); if (pickMode===k) exitPick(); else enterPick(k); });
     return el;
   }
-  function syncOrderFromDOM(){ const vis=[...$("#board").children].map(c=>c.dataset.key); order = vis.concat(order.filter(k=>hidden.has(k))); save(); lastSig=""; }
-  function enterPick(k){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=k; $("#board").classList.add("picking"); if (cardEls[k]) cardEls[k].classList.add("picked"); }
-  function exitPick(){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=null; $("#board").classList.remove("picking"); }
-  function swap(a,b){ const ia=order.indexOf(a), ib=order.indexOf(b); if (ia<0||ib<0||a===b) return; const t=order[ia]; order[ia]=order[ib]; order[ib]=t; save(); lastSig=""; if (last) boardUpdate(last); }
-  function relayout(desired){
+  function visibleKeys(m){ return (m.gpus||[]).map((_,i)=>`gpu${i}`).concat(STATIC_KEYS).filter(k=>!hidden.has(k)); }
+  function ensureSlots(keys){
+    const used = new Set(), need = [];
+    for (const k of keys){ const s = layout[k]; if (s != null && !used.has(s)) used.add(s); else need.push(k); }
+    for (const k of need){ let s = 0; while (used.has(s)) s++; layout[k] = s; used.add(s); }
+  }
+  function enterPick(k){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=k; $("#board").classList.add("picking"); if (cardEls[k]) cardEls[k].classList.add("picked"); lastSig=""; if (last) boardUpdate(last); }
+  function exitPick(){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=null; $("#board").classList.remove("picking"); lastSig=""; if (last) boardUpdate(last); }
+  function swap(a,b){ const t = layout[a]; layout[a] = layout[b]; layout[b] = t; save(); }
+  function moveTo(k, slot){ layout[k] = slot; save(); }
+  function relayout(keys){
     const b = $("#board");
-    order.forEach(k=>{
-      if (hidden.has(k) || !desired.has(k)){ if (cardEls[k]) cardEls[k].remove(); return; }
+    b.querySelectorAll(".slot").forEach(s => s.remove());
+    Object.keys(cardEls).forEach(k => { if (!keys.includes(k)){ cardEls[k].remove(); delete cardEls[k]; } });
+    let maxRow = 0;
+    for (const k of keys){
       if (!cardEls[k]) cardEls[k] = createCard(k);
-      b.appendChild(cardEls[k]);
-    });
+      const s = layout[k], col = s % COLS, row = Math.floor(s / COLS);
+      const el = cardEls[k]; el.style.gridColumn = col + 1; el.style.gridRow = row + 1;
+      b.appendChild(el); if (row > maxRow) maxRow = row;
+    }
+    if (pickMode){
+      const occ = new Set(keys.map(k => layout[k]));
+      for (let i = 0, total = (maxRow + 2) * COLS; i < total; i++){
+        if (occ.has(i)) continue;
+        const cell = document.createElement("div"); cell.className = "slot"; cell.dataset.slot = i;
+        cell.style.gridColumn = (i % COLS) + 1; cell.style.gridRow = Math.floor(i / COLS) + 1; b.appendChild(cell);
+      }
+    }
     updateAddMenu();
   }
   function boardUpdate(m){
-    const gpuKeys = (m.gpus||[]).map((_,i)=>`gpu${i}`);
-    const desiredArr = gpuKeys.concat(STATIC_KEYS);
-    desiredArr.forEach(k=>{ if (!order.includes(k) && !hidden.has(k)) insertKey(k); });
-    const desired = new Set(desiredArr);
-    order = order.filter(k=> !(k.startsWith("gpu") && !desired.has(k)) );
-    const sig = order.join(",") + "|" + [...hidden].join(",") + "|" + gpuKeys.length;
-    if (sig !== lastSig){ relayout(desired); lastSig = sig; }
-    order.forEach(k=>{ if (!hidden.has(k) && desired.has(k) && cardEls[k]) defFor(k).update(cardEls[k], m); });
+    const keys = visibleKeys(m);
+    const desired = new Set((m.gpus||[]).map((_,i)=>`gpu${i}`).concat(STATIC_KEYS));
+    Object.keys(layout).forEach(k => { if (k.startsWith("gpu") && !desired.has(k)) delete layout[k]; });
+    ensureSlots(keys);
+    const sig = keys.map(k => k + ":" + layout[k]).sort().join(",") + "|" + [...hidden].join(",") + "|" + (pickMode || "");
+    if (sig !== lastSig){ relayout(keys); lastSig = sig; }
+    keys.forEach(k => { if (cardEls[k]) defFor(k).update(cardEls[k], m); });
   }
 
   // ---- add-card menu ----
   const addMenu = $("#addMenu");
   function updateAddMenu(){
-    const hid = order.filter(k=>hidden.has(k));
+    const cnt = (last && last.gpus) ? last.gpus.length : 1;
+    const hid = [...hidden].filter(k => k.startsWith("gpu") ? parseInt(k.slice(3)) < cnt : STATIC_KEYS.includes(k));
     addMenu.innerHTML = hid.length ? hid.map(k=>`<button data-k="${k}">${defTitle(k)}</button>`).join("") : `<div class="empty">All cards shown</div>`;
   }
   $("#addBtn").addEventListener("click", e=>{ e.stopPropagation(); updateAddMenu(); addMenu.hidden = !addMenu.hidden; });
@@ -522,7 +535,13 @@
   $("#board").addEventListener("input", e=>{ if (e.target.classList.contains("rateRange")){ intervalMs = +e.target.value; loop();
     document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); } });
   $("#board").addEventListener("click", e=>{
-    if (pickMode){ const card=e.target.closest(".board-card"); if (card){ const tk=card.dataset.key; if (tk===pickMode) exitPick(); else { swap(pickMode, tk); exitPick(); } } return; }
+    if (pickMode){
+      const cell = e.target.closest(".slot");
+      if (cell){ moveTo(pickMode, +cell.dataset.slot); exitPick(); return; }
+      const card = e.target.closest(".board-card");
+      if (card){ const tk=card.dataset.key; if (tk===pickMode) exitPick(); else { swap(pickMode, tk); exitPick(); } }
+      return;
+    }
     const sw = e.target.closest(".unitSwitch"); if (sw){ useC=!useC; if (last) boardUpdate(last); return; }
     const mn = e.target.closest(".mini"); if (mn){ mn.classList.toggle("on"); }
   });
