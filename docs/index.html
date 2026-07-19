@@ -97,13 +97,13 @@
   <span class="mark">Cortex</span>
   <span class="sp"></span>
   <a href="https://github.com/pyatsysh/cortex">GitHub</a>
-  <a href="#what">What it does</a>
+  <a href="#training">For training</a>
   <a href="#roadmap">Roadmap</a>
 </div></nav>
 
 <header class="hero"><div class="wrap">
   <div>
-    <div class="eyebrow">A desktop system monitor · Rust + Tauri · MIT</div>
+    <div class="eyebrow">A GPU &amp; training monitor · Rust + Tauri · MIT</div>
     <div class="brandrow">
       <svg viewBox="0 0 100 100" aria-hidden="true"><g stroke="#BF616A" stroke-width="3.2" stroke-linecap="round" fill="none">
         <line x1="32" y1="24" x2="48" y2="20"/><line x1="48" y1="20" x2="64" y2="22"/><line x1="64" y1="22" x2="77" y2="32"/><line x1="77" y1="32" x2="80" y2="47"/><line x1="80" y1="47" x2="72" y2="58"/><line x1="72" y1="58" x2="72" y2="66"/><line x1="72" y1="66" x2="58" y2="70"/><line x1="58" y1="70" x2="44" y2="68"/><line x1="44" y1="68" x2="30" y2="60"/><line x1="30" y1="60" x2="20" y2="46"/><line x1="20" y1="46" x2="22" y2="33"/><line x1="22" y1="33" x2="32" y2="24"/>
@@ -113,7 +113,7 @@
         <circle cx="42" cy="38" r="2.8"/><circle cx="57" cy="40" r="2.8"/><circle cx="50" cy="52" r="2.8"/><circle cx="36" cy="48" r="2.8"/></g></svg>
       <h1>Cortex</h1>
     </div>
-    <p class="tagline">Reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, and nothing it measures ever leaves the computer.</p>
+    <p class="tagline">A system monitor for the machine you train models on: every GPU in full, your TensorBoard in the same window, and nothing it measures ever leaves the computer.</p>
     <div class="cta">
       <a class="btn solid" href="https://github.com/pyatsysh/cortex">View on GitHub</a>
       <a class="btn ghost" href="#what">How it works</a>
@@ -156,18 +156,25 @@
 
 <section class="band" id="why"><div class="wrap"><div class="card">
   <h2>Why it exists</h2>
-  <p class="lead">The system monitors that look good run on one operating system: iStat Menus on macOS, HWiNFO and Rainmeter on Windows, Mission Center and Conky on Linux. The ones that run everywhere are terminal programs (btop, glances) or server dashboards (Netdata). The ones that look like gaming software are locked to the vendor's own hardware.</p>
-  <p>The middle is empty: one lightweight, cross-platform window that treats the GPU as a first-class part and phones nobody. Cortex is that window.</p>
+  <p class="lead">While a training run is going, you want two things on screen: what the GPUs are doing, and what the loss is doing. Today they live in different places. The vendor hubs that draw a GPU nicely (OMEN, Armoury Crate, iCUE) are built for gamers and locked to the vendor's hardware. The monitors that run everywhere are terminal programs (btop, glances) or server dashboards (Netdata), and none of them sit beside TensorBoard.</p>
+  <p>So you watch one machine through a heavy vendor app, a terminal, and a browser tab at once. Cortex is the one window: GPU-first telemetry and your TensorBoard together, lightweight, and local.</p>
+</div></div></section>
+
+<section class="band" id="training"><div class="wrap"><div class="card">
+  <h2>For training runs</h2>
+  <div class="grid2">
+    <div class="feat"><h3>Every GPU, in full</h3><p>Each NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version, the first thing a framework checks. A four-GPU box gets four cards.</p></div>
+    <div class="feat"><h3>Alive or stalled, at a glance</h3><p>The Training tab reads GPU utilisation continuously, so you can see whether the GPUs are working or the run has died before you open a single loss curve.</p></div>
+    <div class="feat"><h3>TensorBoard in the same window</h3><p>Point the Training tab at your local TensorBoard and it opens inside Cortex, next to the telemetry, instead of in yet another browser tab.</p></div>
+    <div class="feat"><h3>Nothing leaves the box</h3><p>Cortex reads the operating system's counters and the NVIDIA driver, then draws them. The only address it will ever load is the TensorBoard server you name yourself, on localhost.</p></div>
+  </div>
 </div></div></section>
 
 <section class="band" id="what"><div class="wrap"><div class="card">
-  <h2>What it does</h2>
+  <h2>What else it does</h2>
   <div class="grid2">
     <div class="feat"><h3>Leaves nothing behind</h3><p>The gaming hub it replaces measured 863 MB across 15 background processes on the same machine, running whether or not you opened it. Cortex registers no background services: close the window and nothing of it is left running.</p></div>
-    <div class="feat"><h3>Says nothing to the network</h3><p>It reads the operating system's own counters and the NVIDIA driver, then draws them. The only address it will ever load is a TensorBoard server you point it at yourself, on localhost.</p></div>
-    <div class="feat"><h3>Puts the GPU first</h3><p>Every NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version. Two GPUs give two cards, four give four.</p></div>
     <div class="feat"><h3>Rearranges to fit your head</h3><p>Cards move, hide and drop into empty slots on a grid, and the layout is saved between sessions. Keep the cards you read, close the ones you do not.</p></div>
-    <div class="feat"><h3>Watches training runs</h3><p>A Training tab embeds TensorBoard once you connect it. When nothing is connected it still reports whether the GPU is working or idle.</p></div>
     <div class="feat"><h3>Three depths</h3><p>A dashboard of ring gauges, a detailed view with per-core tables and live charts, and a system-information sheet you can copy or print.</p></div>
   </div>
 </div></div></section>
@@ -175,9 +182,9 @@
 <section class="band" id="roadmap"><div class="wrap"><div class="card">
   <h2>Roadmap</h2>
   <ul class="road">
-    <li><b>Now.</b> The card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab.</li>
-    <li><b>Next.</b> Windows CPU and motherboard temperature through a sensor helper; per-process VRAM, so you can see which process owns the GPU; alerts for imminent VRAM exhaustion, thermal throttling and stalled runs.</li>
-    <li><b>Then.</b> AMD and Intel GPUs; native ingestion of TensorBoard scalar files, so loss curves sit beside the telemetry; remote monitoring of a headless training box over the network.</li>
+    <li><b>Now.</b> The GPU-first card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab with the TensorBoard embed and the alive-or-stalled GPU signal.</li>
+    <li><b>Next.</b> Per-process VRAM, so you can see which training process owns which card; alerts for imminent VRAM exhaustion, thermal throttling and a stalled run; the Windows CPU and motherboard temperature helper.</li>
+    <li><b>Then.</b> Native ingestion of TensorBoard's scalar files, so loss and accuracy curves sit on the board beside the GPU telemetry with no browser at all; AMD and Intel GPUs; remote monitoring of a headless training box over the network.</li>
     <li><b>Eventually.</b> Real Linux and macOS builds, and one-line installs with <code>winget</code>, <code>brew</code> and Flathub.</li>
   </ul>
   <p class="note" style="margin-top:22px">Tested so far only on Windows 11, developed under WSL. The Linux and macOS code paths are written and should compile, but they have not been built or run, so treat them as unproven. GPU coverage is NVIDIA-only for now.</p>

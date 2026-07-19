@@ -1,6 +1,6 @@
 # Cortex
 
-Cortex reads your machine and draws it. One small window tracks CPU, memory, disk, network and every NVIDIA GPU (utilisation, temperature, power, VRAM and clocks) on a board of cards you arrange yourself, and nothing it measures ever leaves the computer.
+Cortex is a system monitor for the machine you train models on. It reads your machine and draws it: CPU, memory, disk, network and every NVIDIA GPU on a board of cards you arrange yourself, keeps your TensorBoard in the same window, and lets nothing it measures leave the computer.
 
 It is built in Rust on Tauri, so it ships as a native window instead of a bundled browser.
 
@@ -8,17 +8,21 @@ It is built in Rust on Tauri, so it ships as a native window instead of a bundle
 
 ## Why it exists
 
-The system monitors that look good run on one operating system: iStat Menus and `stats` on macOS, HWiNFO and Rainmeter on Windows, Mission Center and Conky on Linux. The ones that run everywhere are terminal programs (btop, glances) or server dashboards (Netdata). The ones that look like gaming software are locked to the vendor's own hardware. The middle is empty: one lightweight, cross-platform window that treats the GPU as a first-class part and phones nobody.
+While a training run is going, you want two things on screen: what the GPUs are doing, and what the loss is doing. Today they live in different places. The vendor hubs that draw a GPU nicely (OMEN, Armoury Crate, iCUE) are built for gamers and locked to the vendor's hardware. The monitors that run everywhere are terminal programs (btop, glances) or server dashboards (Netdata), and none of them sit beside TensorBoard. So you watch one machine through a heavy vendor app, a terminal, and a browser tab at once.
 
-Cortex is that window.
+Cortex is the one window: GPU-first telemetry and your TensorBoard together, lightweight, and local.
 
-## What it does
+## For training runs
 
-- **It leaves nothing behind.** The gaming hub it replaces measured 863 MB across 15 background processes on the same machine, and those processes run whether or not you open the app. Cortex registers no background services: close the window and nothing of it is left running.
-- **It says nothing to the network.** It reads the operating system's own counters and the NVIDIA driver, then draws them. The only address it will ever load is a TensorBoard server you point it at yourself, on localhost.
-- **It puts the GPU first.** Every NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version. Two GPUs give two cards, four give four.
-- **It rearranges to fit your head.** Cards move, hide and drop into empty slots on a grid; the layout is saved between sessions. Keep the cards you read, close the ones you do not.
-- **It watches training runs.** A Training tab embeds TensorBoard once you connect it, and when nothing is connected it still reports whether the GPU is working or idle.
+- **Every GPU, in full.** Each NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version (the first thing a framework checks). A four-GPU box gets four cards.
+- **Alive or stalled, at a glance.** The Training tab reads GPU utilisation continuously, so you can see whether the GPUs are working or the run has died before you open a single loss curve.
+- **TensorBoard, in the same window.** Point the Training tab at your local TensorBoard and it opens inside Cortex, next to the telemetry, instead of in yet another browser tab.
+- **Nothing leaves the box.** Cortex reads the operating system's counters and the NVIDIA driver, then draws them. The only address it will ever load is the TensorBoard server you name yourself, on localhost.
+
+## What else it does
+
+- **It leaves nothing behind.** The gaming hub it replaces measured 863 MB across 15 background processes on the same machine, running whether or not you opened it. Cortex registers no background services: close the window and nothing of it is left running.
+- **It rearranges to fit your head.** Cards move, hide and drop into empty slots on a grid, and the layout is saved between sessions. Keep the cards you read, close the ones you do not.
 - **It has three depths.** A dashboard of ring gauges, a detailed view with per-core tables and live charts, and a system-information sheet you can copy or print.
 
 ## Status
@@ -39,9 +43,9 @@ The full Windows walkthrough is in [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
 
 ## Roadmap
 
-- **Now:** the card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab.
-- **Next:** Windows CPU and motherboard temperature through a sensor helper; per-process VRAM (which process owns the GPU); alerts for imminent VRAM exhaustion, thermal throttling and stalled runs.
-- **Then:** AMD and Intel GPUs; native ingestion of TensorBoard scalar files so loss curves sit beside the telemetry; remote monitoring of a headless training box over the network.
+- **Now:** the GPU-first card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab with the TensorBoard embed and the alive-or-stalled GPU signal.
+- **Next:** per-process VRAM, so you can see which training process owns which card; alerts for imminent VRAM exhaustion, thermal throttling and a stalled run; the Windows CPU and motherboard temperature helper.
+- **Then:** native ingestion of TensorBoard's scalar files, so loss and accuracy curves sit on the board beside the GPU telemetry with no browser at all; AMD and Intel GPUs; remote monitoring of a headless training box over the network.
 - **Eventually:** real Linux and macOS builds, and one-line installs (`winget`, `brew`, Flathub).
 
 ## Licence
