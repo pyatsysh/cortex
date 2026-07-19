@@ -225,7 +225,7 @@
             <div class="drow"><span>Threads</span><b id="d-cpu-threads">--</b></div>
           </div>
           <div><div class="dkey">Per-core &mdash; clock / util</div><div class="corelist" id="d-cores"></div></div>
-          <div class="dchart"><canvas id="chart-cpu"></canvas><div class="legend"><span><i style="background:var(--orange)"></i>Utilization %</span></div></div>
+          <div class="dchart"><canvas id="chart-cpu"></canvas><div class="legend"><span><i style="background:var(--pink)"></i>Utilization %</span></div></div>
         </div></div>
       </div>
       <div class="dsection" id="sec-gpu">
@@ -243,7 +243,7 @@
             <div class="drow"><span>Memory bus</span><b id="d-gpu-um">--</b></div>
             <div class="drow"><span>VRAM in use</span><b id="d-gpu-mem">--</b></div>
           </div>
-          <div class="dchart"><canvas id="chart-gpu"></canvas><div class="legend"><span><i style="background:var(--orange)"></i>Engine %</span><span><i style="background:var(--blue)"></i>Mem bus %</span></div></div>
+          <div class="dchart"><canvas id="chart-gpu"></canvas><div class="legend"><span><i style="background:var(--pink)"></i>Engine %</span><span><i style="background:var(--blue)"></i>Mem bus %</span></div></div>
         </div></div>
       </div>
       <div class="dsection" id="sec-ram">
@@ -308,7 +308,7 @@
   const inTauri = !!(window.__TAURI__ && window.__TAURI__.core);
   const invoke = (cmd) => window.__TAURI__.core.invoke(cmd);
 
-  let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "";
+  let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "", sysInfo = null;
 
   // brand mark — connectome brain (matches the app icon)
   (() => {
@@ -363,8 +363,8 @@
   }
   function drawCharts(){
     if (activeView !== "detail") return;
-    drawChart($("#chart-cpu"), [{data:hist.cpu, color:getCss("--orange"), max:100}]);
-    drawChart($("#chart-gpu"), [{data:hist.gpuU, color:getCss("--orange"), max:100},{data:hist.gpuM, color:getCss("--blue"), max:100}]);
+    drawChart($("#chart-cpu"), [{data:hist.cpu, color:getCss("--pink"), max:100}]);
+    drawChart($("#chart-gpu"), [{data:hist.gpuU, color:getCss("--pink"), max:100},{data:hist.gpuM, color:getCss("--blue"), max:100}]);
     drawChart($("#chart-ram"), [{data:hist.ram, color:getCss("--purple"), max:100}]);
     drawChart($("#chart-net"), [{data:hist.up, color:getCss("--pink")},{data:hist.down, color:getCss("--purple")}]);
   }
@@ -414,7 +414,8 @@
       const t=el.querySelector(".t"); t.textContent=showTemp(g.temp); t.style.color=tempColor(g.temp);
       const vr=(g.vram_used!=null&&g.vram_total!=null)?`VRAM ${(g.vram_pct||0).toFixed(0)}% <b>(${g.vram_used.toFixed(1)}/${g.vram_total.toFixed(1)} GB)</b>`:"VRAM N/A";
       const pw=g.power!=null?` · <b>${g.power.toFixed(0)} W</b>`:"";
-      el.querySelector(".gl").innerHTML = vr + pw;
+      const drv=(sysInfo&&sysInfo.gpu_driver&&sysInfo.gpu_driver!=="—")?` · drv <b>${sysInfo.gpu_driver}</b>`:"";
+      el.querySelector(".gl").innerHTML = vr + pw + drv;
       const cnt=(m.gpus||[]).length; el.querySelector("h3").textContent = cnt>1?`GPU ${i}`:"GPU"; } });
   function defFor(k){ return k.startsWith("gpu") ? gpuDef(parseInt(k.slice(3))) : CARD_DEFS[k]; }
   function defTitle(k){ if (k.startsWith("gpu")){ const c=(last&&last.gpus?last.gpus.length:1); return c>1?`GPU ${parseInt(k.slice(3))}`:"GPU"; } return CARD_DEFS[k].title; }
@@ -425,8 +426,7 @@
   let order = load(LS_ORDER, DEFAULT_ORDER.slice(), Array.isArray) ;
   let hidden = new Set(load(LS_HIDDEN, [], Array.isArray));
   const cardEls = {};
-  let lastSig = "", dragKey = null, armed = null;
-  document.addEventListener("mouseup", ()=>{ if (armed){ armed.draggable = false; armed = null; } });
+  let lastSig = "", dragKey = null;
   function load(key, def, ok){ try { const v = JSON.parse(localStorage.getItem(key)); return ok(v) ? v : def; } catch(_){ return def; } }
   function save(){ try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch(_){} }
 
@@ -438,17 +438,23 @@
     const def = defFor(k);
     const el = document.createElement("section");
     el.className = "card board-card" + (def.span>1?" span2":"");
-    el.dataset.key = k; el.draggable = false;
+    el.dataset.key = k; el.draggable = true;
     el.innerHTML = `<div class="card-head"><span class="drag" title="Drag to reorder">&#9776;</span><h3>${defTitle(k)}</h3><button class="close" title="Hide card">&times;</button></div><div class="card-body">${def.body}</div>`;
     el.querySelectorAll(".prog").forEach(p=>{ p.style.strokeDasharray=C; p.style.strokeDashoffset=C; });
     el.querySelector(".close").addEventListener("click", ()=>{ hidden.add(k); save(); if (cardEls[k]) cardEls[k].remove(); lastSig=""; updateAddMenu(); });
-    // drag only from the handle, so sliders / text selection inside a card still work
-    el.querySelector(".drag").addEventListener("mousedown", ()=>{ armed = el; el.draggable = true; });
-    el.addEventListener("dragstart", e=>{ if (!el.draggable){ e.preventDefault(); return; } dragKey=k; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",k); }catch(_){} });
-    el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); el.draggable=false; dragKey=null; });
-    el.addEventListener("dragover", e=>{ e.preventDefault(); if (!dragKey || dragKey===k) return; const drag=cardEls[dragKey]; if (!drag) return;
-      const r=el.getBoundingClientRect(); const before = (e.clientY - r.top) < r.height/2; el.parentNode.insertBefore(drag, before?el:el.nextSibling); });
-    el.addEventListener("drop", e=>{ e.preventDefault(); syncOrderFromDOM(); });
+    // drag to reorder; interacting with a control inside a card must not start a drag
+    el.addEventListener("dragstart", e=>{
+      if (e.target.closest("input,button,.switch,.mini,a")){ e.preventDefault(); return; }
+      dragKey=k; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",k); }catch(_){}
+    });
+    el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); dragKey=null; syncOrderFromDOM(); });
+    el.addEventListener("dragover", e=>{
+      if (!dragKey || dragKey===k) return;
+      e.preventDefault(); e.dataTransfer.dropEffect="move";
+      const drag=cardEls[dragKey]; if (!drag) return;
+      const r=el.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; el.parentNode.insertBefore(drag, before?el:el.nextSibling);
+    });
+    el.addEventListener("drop", e=>{ e.preventDefault(); });
     return el;
   }
   function syncOrderFromDOM(){ const vis=[...$("#board").children].map(c=>c.dataset.key); order = vis.concat(order.filter(k=>hidden.has(k))); save(); lastSig=""; }
@@ -485,6 +491,7 @@
   // ---- board delegated interactions (settings live inside a card) ----
   $("#board").addEventListener("input", e=>{ if (e.target.classList.contains("rateRange")){ intervalMs = +e.target.value; loop();
     document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); } });
+  $("#board").addEventListener("dragover", e=>{ e.preventDefault(); });
   $("#board").addEventListener("click", e=>{
     const sw = e.target.closest(".unitSwitch"); if (sw){ useC=!useC; if (last) boardUpdate(last); return; }
     const mn = e.target.closest(".mini"); if (mn){ mn.classList.toggle("on"); }
@@ -528,6 +535,7 @@
   function fmtUptime(s){ const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),mn=Math.floor(s%3600/60); return (d?d+"d ":"")+(h?h+"h ":"")+mn+"m"; }
   async function loadSysinfo(){
     const s = inTauri ? await invoke("get_sysinfo") : demoSysinfo();
+    sysInfo = s;
     $("#i-os").textContent = s.os; $("#i-kernel").textContent = "Build / kernel " + s.kernel;
     $("#i-cpu").textContent = s.cpu; $("#i-cpu2").textContent = `${s.cpu_threads} threads · ${(s.cpu_mhz/1000).toFixed(2)} GHz`;
     $("#i-gpu").textContent = s.gpu; $("#i-gpu2").textContent = "Driver " + s.gpu_driver + (s.cuda && s.cuda !== "—" ? " · CUDA " + s.cuda : "");
