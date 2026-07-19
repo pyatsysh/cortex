@@ -14,8 +14,10 @@ use nvml_wrapper::Nvml;
 
 #[derive(Serialize)]
 struct Gpu {
+    name: String,
     util: Option<f32>,       // % engine busy — None => UI shows "N/A"
     temp: Option<f32>,       // °C
+    power: Option<f32>,      // Watts (board power draw)
     mem_util: Option<f32>,   // % memory-controller busy (bandwidth activity)
     vram_pct: Option<f32>,   // % of VRAM in use
     vram_used: Option<f32>,  // GB of VRAM in use
@@ -76,7 +78,7 @@ struct Proc {
 }
 #[derive(Serialize)]
 struct Metrics {
-    gpu: Gpu,
+    gpus: Vec<Gpu>,
     cpu: Cpu,
     ram: Ram,
     disks: Vec<DiskInfo>,
@@ -175,19 +177,21 @@ fn get_metrics(state: State<Mutex<AppState>>) -> Metrics {
         })
         .collect();
 
-    // NVIDIA GPU (optional)
-    let (mut gpu_util, mut gpu_temp, mut mem_util) = (None, None, None);
-    let (mut vram_pct, mut vram_used, mut vram_total) = (None, None, None);
-    let (mut clock_core, mut clock_mem) = (None, None);
+    // NVIDIA GPUs (0..N — empty on machines without NVML / non-NVIDIA cards)
+    let mut gpus: Vec<Gpu> = Vec::new();
     if let Some(nvml) = &s.nvml {
-        if let Ok(dev) = nvml.device_by_index(0) {
+        let count = nvml.device_count().unwrap_or(0);
+        for i in 0..count {
+            let dev = match nvml.device_by_index(i) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            let (mut util, mut mem_util) = (None, None);
             if let Ok(u) = dev.utilization_rates() {
-                gpu_util = Some(u.gpu as f32);
+                util = Some(u.gpu as f32);
                 mem_util = Some(u.memory as f32);
             }
-            gpu_temp = dev.temperature(TemperatureSensor::Gpu).ok().map(|t| t as f32);
-            clock_core = dev.clock_info(Clock::Graphics).ok();
-            clock_mem = dev.clock_info(Clock::Memory).ok();
+            let (mut vram_pct, mut vram_used, mut vram_total) = (None, None, None);
             if let Ok(mem) = dev.memory_info() {
                 vram_used = Some((mem.used as f64 / GIB) as f32);
                 vram_total = Some((mem.total as f64 / GIB) as f32);
@@ -195,6 +199,18 @@ fn get_metrics(state: State<Mutex<AppState>>) -> Metrics {
                     vram_pct = Some((mem.used as f64 / mem.total as f64 * 100.0) as f32);
                 }
             }
+            gpus.push(Gpu {
+                name: dev.name().unwrap_or_else(|_| "GPU".into()),
+                util,
+                temp: dev.temperature(TemperatureSensor::Gpu).ok().map(|t| t as f32),
+                power: dev.power_usage().ok().map(|mw| mw as f32 / 1000.0),
+                mem_util,
+                vram_pct,
+                vram_used,
+                vram_total,
+                clock_core: dev.clock_info(Clock::Graphics).ok(),
+                clock_mem: dev.clock_info(Clock::Memory).ok(),
+            });
         }
     }
 
@@ -231,16 +247,7 @@ fn get_metrics(state: State<Mutex<AppState>>) -> Metrics {
         .collect();
 
     Metrics {
-        gpu: Gpu {
-            util: gpu_util,
-            temp: gpu_temp,
-            mem_util,
-            vram_pct,
-            vram_used,
-            vram_total,
-            clock_core,
-            clock_mem,
-        },
+        gpus,
         cpu: Cpu { util: cpu_util, temp: cpu_temp },
         ram,
         disks: disk_info,

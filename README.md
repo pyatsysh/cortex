@@ -48,8 +48,8 @@ System_Monitor/
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
 │   ├── capabilities/       # window permissions
-│   └── icons/              # generated app icons (from app-icon.png)
-├── app-icon.png            # source icon; regenerate the set with `npm run icon`
+│   └── icons/              # generated app icons (from cortex-icon.png)
+├── cortex-icon.png            # source icon; regenerate the set with `npm run icon`
 └── package.json
 ```
 
