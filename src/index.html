@@ -69,10 +69,12 @@
   .board-card{display:flex; flex-direction:column; overflow:hidden}
   .board-card.span2{grid-column:span 2}
   /* move mode: click a card's handle, then click a target card to swap */
-  .board.picking .board-card{outline:1px dashed rgba(136,192,208,.4); cursor:pointer}
   .board.picking .board-card *{pointer-events:none}
+  .board.picking .board-card{cursor:pointer}
+  .board.picking .board-card:not(.target):not(.picked){opacity:.4}
+  .board.picking .board-card.target{outline:1px dashed rgba(136,192,208,.5)}
+  .board.picking .board-card.target:hover{outline:2px solid var(--pink); background:rgba(136,192,208,.08)}
   .board.picking .board-card.picked{outline:2px solid var(--pink); box-shadow:0 0 0 3px rgba(136,192,208,.15)}
-  .board.picking .board-card:not(.picked):hover{outline:2px solid var(--pink); background:rgba(136,192,208,.06)}
   .slot{border:2px dashed rgba(136,192,208,.35); border-radius:var(--radius); background:rgba(136,192,208,.04); cursor:pointer}
   .slot:hover{border-color:var(--pink); background:rgba(136,192,208,.1)}
   .card-head{display:flex; align-items:center; gap:8px; margin-bottom:2px}
@@ -82,16 +84,16 @@
   .card-head .close{background:transparent; border:0; color:var(--faint); font-size:17px; line-height:1; cursor:pointer;
     width:22px; height:22px; border-radius:6px; display:grid; place-items:center}
   .card-head .close:hover{color:var(--red); background:var(--card-inset)}
-  .card-body{flex:1; display:flex; flex-direction:column; overflow:auto}
+  .card-body{flex:1; display:flex; flex-direction:column; overflow:hidden}
 
   /* rings */
   .ringwrap{flex:1; display:grid; place-items:center; position:relative; margin:4px 0}
-  .ring{width:150px; height:150px; transform:rotate(-90deg)}
+  .ring{width:138px; height:138px; transform:rotate(-90deg)}
   .ring .track{fill:none; stroke:var(--track); stroke-width:9}
   .ring .prog{fill:none; stroke-width:9; stroke-linecap:round; transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)}
   .ringlabel{position:absolute; inset:0; display:grid; place-content:center; text-align:center}
-  .ringlabel .val{font-size:38px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1}
-  .ringlabel .val small{font-size:19px; font-weight:700; margin-left:1px}
+  .ringlabel .val{font-size:34px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1}
+  .ringlabel .val small{font-size:17px; font-weight:700; margin-left:1px}
   .ringlabel .sub{font-size:11.5px; color:var(--dim); margin-top:5px}
   .temp{display:flex; align-items:baseline; gap:9px; margin-top:2px}
   .temp .t{font-size:21px; font-weight:800; font-variant-numeric:tabular-nums}
@@ -348,7 +350,9 @@
   const inTauri = !!(window.__TAURI__ && window.__TAURI__.core);
   const invoke = (cmd) => window.__TAURI__.core.invoke(cmd);
 
-  let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "", sysInfo = null;
+  let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "", sysInfo = null, aotOn = false;
+  try { aotOn = localStorage.getItem("cortex.aot") === "1"; } catch(_){}
+  function setAlwaysOnTop(on){ try { const w = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow(); if (w && w.setAlwaysOnTop) w.setAlwaysOnTop(!!on); } catch(_){} }
 
   // brand mark — connectome brain (matches the app icon)
   (() => {
@@ -435,13 +439,13 @@
       <div class="field"><div class="k">Temperature</div>
         <div class="unit"><span class="uF">&deg;F</span><div class="switch unitSwitch" data-on="C"></div><span class="uC on">&deg;C</span></div></div>
       <div class="field"><div class="k">Window</div>
-        <div class="toggline"><span>Always on top</span><div class="mini aot"></div></div>
-        <div class="toggline"><span>Start with system</span><div class="mini startup"></div></div></div>`,
+        <div class="toggline"><span>Always on top</span><div class="mini aot"></div></div></div>`,
       update(el){ const sw=el.querySelector(".unitSwitch"); sw.dataset.on=useC?"C":"F";
         el.querySelector(".uC").classList.toggle("on",useC); el.querySelector(".uF").classList.toggle("on",!useC);
         const rr=el.querySelector(".rateRange"); if (document.activeElement!==rr) rr.value=intervalMs;
-        el.querySelector(".rateVal").textContent=(intervalMs/1000).toFixed(1)+"s"; } },
-    procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
+        el.querySelector(".rateVal").textContent=(intervalMs/1000).toFixed(1)+"s";
+        el.querySelector(".aot").classList.toggle("on", aotOn); } },
+    procs: { title:"Top Processes", span:2, body: `<table><thead><tr><th class="l">Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
       update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
         <td class="l"><div class="proc"><span class="chip" style="background:${p.color}">${(p.name[0]||"?").toUpperCase()}</span><span class="nm">${p.name}</span></div></td>
         <td>${p.cpu.toFixed(0)}%</td><td>${p.ram}MB</td></tr>`).join(""); } },
@@ -458,6 +462,7 @@
       const cnt=(m.gpus||[]).length; el.querySelector("h3").textContent = cnt>1?`GPU ${i}`:"GPU"; } });
   function defFor(k){ return k.startsWith("gpu") ? gpuDef(parseInt(k.slice(3))) : CARD_DEFS[k]; }
   function defTitle(k){ if (k.startsWith("gpu")){ const c=(last&&last.gpus?last.gpus.length:1); return c>1?`GPU ${parseInt(k.slice(3))}`:"GPU"; } return CARD_DEFS[k].title; }
+  const cardSpan = k => (defFor(k).span || 1);
 
   // ==== board manager (positional 4-column slot grid; supports empty slots) ====
   const COLS = 4;
@@ -482,8 +487,12 @@
   function visibleKeys(m){ return (m.gpus||[]).map((_,i)=>`gpu${i}`).concat(STATIC_KEYS).filter(k=>!hidden.has(k)); }
   function ensureSlots(keys){
     const used = new Set(), need = [];
-    for (const k of keys){ const s = layout[k]; if (s != null && !used.has(s)) used.add(s); else need.push(k); }
-    for (const k of need){ let s = 0; while (used.has(s)) s++; layout[k] = s; used.add(s); }
+    for (const k of keys){ const s = layout[k], sp = cardSpan(k);
+      const fits = s != null && !used.has(s) && (sp === 1 || (s % COLS <= 2 && !used.has(s + 1)));
+      if (fits){ used.add(s); if (sp === 2) used.add(s + 1); } else need.push(k); }
+    for (const k of need){ const sp = cardSpan(k); let s = 0;
+      while (sp === 2 ? (s % COLS > 2 || used.has(s) || used.has(s + 1)) : used.has(s)) s++;
+      layout[k] = s; used.add(s); if (sp === 2) used.add(s + 1); }
   }
   function enterPick(k){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=k; $("#board").classList.add("picking"); if (cardEls[k]) cardEls[k].classList.add("picked"); lastSig=""; if (last) boardUpdate(last); }
   function exitPick(){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=null; $("#board").classList.remove("picking"); lastSig=""; if (last) boardUpdate(last); }
@@ -493,20 +502,25 @@
     const b = $("#board");
     b.querySelectorAll(".slot").forEach(s => s.remove());
     Object.keys(cardEls).forEach(k => { if (!keys.includes(k)){ cardEls[k].remove(); delete cardEls[k]; } });
-    let maxRow = 0;
+    const occ = new Set(); let maxRow = 0;
     for (const k of keys){
       if (!cardEls[k]) cardEls[k] = createCard(k);
-      const s = layout[k], col = s % COLS, row = Math.floor(s / COLS);
-      const el = cardEls[k]; el.style.gridColumn = col + 1; el.style.gridRow = row + 1;
-      b.appendChild(el); if (row > maxRow) maxRow = row;
+      const s = layout[k], col = s % COLS, row = Math.floor(s / COLS), sp = cardSpan(k);
+      const el = cardEls[k]; el.style.gridColumn = sp === 2 ? `${col + 1} / span 2` : `${col + 1}`; el.style.gridRow = row + 1;
+      b.appendChild(el); occ.add(s); if (sp === 2) occ.add(s + 1); if (row > maxRow) maxRow = row;
     }
     if (pickMode){
-      const occ = new Set(keys.map(k => layout[k]));
+      const span = cardSpan(pickMode);
       for (let i = 0, total = (maxRow + 2) * COLS; i < total; i++){
-        if (occ.has(i)) continue;
+        const col = i % COLS;
+        const ok = span === 2 ? (col <= 2 && !occ.has(i) && !occ.has(i + 1)) : !occ.has(i);
+        if (!ok) continue;
         const cell = document.createElement("div"); cell.className = "slot"; cell.dataset.slot = i;
-        cell.style.gridColumn = (i % COLS) + 1; cell.style.gridRow = Math.floor(i / COLS) + 1; b.appendChild(cell);
+        cell.style.gridColumn = span === 2 ? `${col + 1} / span 2` : `${col + 1}`; cell.style.gridRow = Math.floor(i / COLS) + 1; b.appendChild(cell);
       }
+      for (const k of keys) if (cardEls[k]) cardEls[k].classList.toggle("target", k !== pickMode && cardSpan(k) === span);
+    } else {
+      for (const k of keys) if (cardEls[k]) cardEls[k].classList.remove("target");
     }
     updateAddMenu();
   }
@@ -539,11 +553,12 @@
       const cell = e.target.closest(".slot");
       if (cell){ moveTo(pickMode, +cell.dataset.slot); exitPick(); return; }
       const card = e.target.closest(".board-card");
-      if (card){ const tk=card.dataset.key; if (tk===pickMode) exitPick(); else { swap(pickMode, tk); exitPick(); } }
+      if (card){ const tk=card.dataset.key; if (tk===pickMode) exitPick(); else if (cardSpan(tk)===cardSpan(pickMode)){ swap(pickMode, tk); exitPick(); } }
       return;
     }
     const sw = e.target.closest(".unitSwitch"); if (sw){ useC=!useC; if (last) boardUpdate(last); return; }
-    const mn = e.target.closest(".mini"); if (mn){ mn.classList.toggle("on"); }
+    const mn = e.target.closest(".mini"); if (mn){ const on = !mn.classList.contains("on"); mn.classList.toggle("on", on);
+      if (mn.classList.contains("aot")){ aotOn = on; try { localStorage.setItem("cortex.aot", on ? "1" : "0"); } catch(_){} setAlwaysOnTop(on); } }
   });
   document.addEventListener("click", e=>{ if (pickMode && !e.target.closest("#board")) exitPick(); });
   document.addEventListener("keydown", e=>{ if (e.key==="Escape" && pickMode) exitPick(); });
@@ -647,6 +662,7 @@
   async function tick(){ render(await fetchMetrics()); }
   function loop(){ clearInterval(timer); tick(); timer = setInterval(tick, intervalMs); }
   window.addEventListener("resize", drawCharts);
+  if (aotOn) setAlwaysOnTop(true);
   loadSysinfo();
   loop();
 })();
