@@ -26,7 +26,7 @@
       var(--bg);
     color:var(--txt); -webkit-font-smoothing:antialiased; overflow-x:hidden;
   }
-  .app{max-width:1280px; margin:0 auto; padding:0 18px 26px; min-height:100%; display:flex; flex-direction:column}
+  .app{margin:0 auto; padding:0 18px 26px; min-height:100%; display:flex; flex-direction:column}
 
   /* ---------- top bar ---------- */
   .topbar{display:flex; align-items:center; gap:18px; padding:16px 4px 14px; position:sticky; top:0; z-index:10;
@@ -45,6 +45,13 @@
   .mode.active{background:#ECEFF4; color:#2E3440; border-color:transparent}
   .mode:not(.active):hover{color:var(--txt); border-color:rgba(255,255,255,.18)}
   .spacer{flex:1}
+
+  /* always-on-top lives in the header so it is reachable without opening a card */
+  .pin{width:38px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--dim);
+    display:grid; place-items:center; cursor:pointer; transition:.18s; flex:none; padding:0}
+  .pin svg{width:17px; height:17px}
+  .pin:not(.on):hover{color:var(--txt); border-color:rgba(255,255,255,.18)}
+  .pin.on{background:linear-gradient(90deg,var(--pink),var(--purple)); color:#2E3440; border-color:transparent}
 
   .addwrap{position:relative}
   .addbtn{background:var(--card); border:1px solid var(--line); color:var(--dim); padding:8px 14px; border-radius:9px;
@@ -65,7 +72,7 @@
   .card{background:linear-gradient(180deg, var(--card), #2A303B); border:1px solid var(--line); border-radius:var(--radius);
     padding:16px 18px; position:relative; overflow:hidden}
   .card h3{font-size:13px; letter-spacing:.13em; color:var(--dim); font-weight:700; text-transform:uppercase}
-  .board{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:minmax(252px,auto); gap:14px; margin-top:6px}
+  .board{display:grid; grid-template-columns:repeat(6,1fr); grid-auto-rows:minmax(252px,auto); gap:14px; margin-top:6px}
   .board-card{display:flex; flex-direction:column; overflow:hidden}
   .board-card.span2{grid-column:span 2}
   /* move mode: click a card's handle, then click a target card to swap */
@@ -127,11 +134,6 @@
   .switch[data-on="C"]{background:linear-gradient(90deg,var(--pink),var(--purple))}
   .switch[data-on="C"]::after{left:22px}
   .unit .on{color:var(--txt); font-weight:600}
-  .toggline{display:flex; align-items:center; justify-content:space-between; margin-top:9px; font-size:13.5px}
-  .mini{width:40px; height:22px; border-radius:14px; background:var(--card-inset); border:1px solid var(--line); position:relative; cursor:pointer; flex:none}
-  .mini::after{content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#ECEFF4; transition:.18s}
-  .mini.on{background:linear-gradient(90deg,var(--pink),var(--purple))}
-  .mini.on::after{left:20px}
 
   /* network */
   .net{display:flex; flex-direction:column; gap:14px; margin-top:10px}
@@ -231,6 +233,9 @@
       </div>
     </nav>
     <div class="spacer"></div>
+    <button class="pin" id="aotBtn" title="Always on top" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 6 4 3v2H6v-2l4-3z"/><path d="M12 15v5"/></svg>
+    </button>
     <div class="addwrap">
       <button class="addbtn" id="addBtn">+ Card</button>
       <div class="addmenu" id="addMenu" hidden></div>
@@ -439,15 +444,16 @@
     settings: { title:"Settings", span:1, body: `
       <div class="field"><div class="k">Update interval &middot; <span class="rateVal">1.0s</span></div>
         <input type="range" class="slider rateRange" min="500" max="10000" step="500" value="1000"></div>
+      <div class="field"><div class="k">Cards per row &middot; <span class="colsVal">6</span></div>
+        <input type="range" class="slider colsRange" min="3" max="8" step="1" value="6"></div>
       <div class="field"><div class="k">Temperature</div>
-        <div class="unit"><span class="uF">&deg;F</span><div class="switch unitSwitch" data-on="C"></div><span class="uC on">&deg;C</span></div></div>
-      <div class="field"><div class="k">Window</div>
-        <div class="toggline"><span>Always on top</span><div class="mini aot"></div></div></div>`,
+        <div class="unit"><span class="uF">&deg;F</span><div class="switch unitSwitch" data-on="C"></div><span class="uC on">&deg;C</span></div></div>`,
       update(el){ const sw=el.querySelector(".unitSwitch"); sw.dataset.on=useC?"C":"F";
         el.querySelector(".uC").classList.toggle("on",useC); el.querySelector(".uF").classList.toggle("on",!useC);
         const rr=el.querySelector(".rateRange"); if (document.activeElement!==rr) rr.value=intervalMs;
         el.querySelector(".rateVal").textContent=(intervalMs/1000).toFixed(1)+"s";
-        el.querySelector(".aot").classList.toggle("on", aotOn); } },
+        const cr=el.querySelector(".colsRange"); if (document.activeElement!==cr) cr.value=COLS;
+        el.querySelector(".colsVal").textContent=COLS; } },
     procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th class="pcpu">CPU</th><th class="pram">RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
       update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
         <td class="l"><div class="proc"><span class="chip">${(p.name[0]||"?").toUpperCase()}</span><span class="nm" title="${p.name}">${p.name}</span></div></td>
@@ -469,16 +475,40 @@
   function defTitle(k){ if (k.startsWith("gpu")){ const c=(last&&last.gpus?last.gpus.length:1); return c>1?`GPU ${parseInt(k.slice(3))}`:"GPU"; } return CARD_DEFS[k].title; }
   const cardSpan = k => (defFor(k).span || 1);
 
-  // ==== board manager (positional 4-column slot grid; supports empty slots) ====
-  const COLS = 4;
+  // ==== board manager (positional slot grid, COLS wide; supports empty slots) ====
+  const COLS_MIN = 3, COLS_MAX = 8;
   const DEFAULT_LAYOUT = { gpu0:0, cpu:1, ram:2, storage:3, network:4, settings:5, procs:6 };
-  const LS_LAYOUT = "cortex.layout", LS_HIDDEN = "cortex.hidden";
+  const LS_LAYOUT = "cortex.layout", LS_HIDDEN = "cortex.hidden", LS_COLS = "cortex.cols";
+  let COLS = load(LS_COLS, 6, v => Number.isInteger(v) && v >= COLS_MIN && v <= COLS_MAX);
   let layout = load(LS_LAYOUT, {...DEFAULT_LAYOUT}, v => v && typeof v === "object" && !Array.isArray(v));
   let hidden = new Set(load(LS_HIDDEN, [], Array.isArray));
   const cardEls = {};
   let lastSig = "", pickMode = null;
   function load(key, def, ok){ try { const v = JSON.parse(localStorage.getItem(key)); return ok(v) ? v : def; } catch(_){ return def; } }
-  function save(){ try { localStorage.setItem(LS_LAYOUT, JSON.stringify(layout)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch(_){} }
+  function save(){ try { localStorage.setItem(LS_LAYOUT, JSON.stringify(layout)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); localStorage.setItem(LS_COLS, JSON.stringify(COLS)); } catch(_){} }
+
+  function applyCols(){
+    // No width cap: the board always fills the window, so slack collapses as the
+    // window is resized. Card width follows from the column count.
+    $("#board").style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+  }
+  // Slots are absolute indices, so a column change has to re-place every card.
+  // Compact the VISIBLE cards into reading order: same left-to-right sequence,
+  // no gaps. Hidden cards must be excluded or they reserve slots that the board
+  // then renders as holes. They keep their old slot and ensureSlots re-places
+  // them if they come back.
+  function remapCols(){
+    Object.keys(layout)
+      .filter(k => !hidden.has(k))
+      .sort((a,b) => layout[a] - layout[b])
+      .forEach((k,i) => { layout[k] = i; });
+  }
+  function setCols(n){
+    n = Math.max(COLS_MIN, Math.min(COLS_MAX, n|0));
+    if (n === COLS) return;
+    remapCols(); COLS = n; applyCols(); save();
+    lastSig = ""; if (last) boardUpdate(last);
+  }
 
   function createCard(k){
     const el = document.createElement("section");
@@ -493,10 +523,10 @@
   function ensureSlots(keys){
     const used = new Set(), need = [];
     for (const k of keys){ const s = layout[k], sp = cardSpan(k);
-      const fits = s != null && !used.has(s) && (sp === 1 || (s % COLS <= 2 && !used.has(s + 1)));
+      const fits = s != null && !used.has(s) && (sp === 1 || (s % COLS <= COLS - 2 && !used.has(s + 1)));
       if (fits){ used.add(s); if (sp === 2) used.add(s + 1); } else need.push(k); }
     for (const k of need){ const sp = cardSpan(k); let s = 0;
-      while (sp === 2 ? (s % COLS > 2 || used.has(s) || used.has(s + 1)) : used.has(s)) s++;
+      while (sp === 2 ? (s % COLS > COLS - 2 || used.has(s) || used.has(s + 1)) : used.has(s)) s++;
       layout[k] = s; used.add(s); if (sp === 2) used.add(s + 1); }
   }
   function enterPick(k){ if (pickMode && cardEls[pickMode]) cardEls[pickMode].classList.remove("picked"); pickMode=k; $("#board").classList.add("picking"); if (cardEls[k]) cardEls[k].classList.add("picked"); lastSig=""; if (last) boardUpdate(last); }
@@ -518,7 +548,7 @@
       const span = cardSpan(pickMode);
       for (let i = 0, total = (maxRow + 2) * COLS; i < total; i++){
         const col = i % COLS;
-        const ok = span === 2 ? (col <= 2 && !occ.has(i) && !occ.has(i + 1)) : !occ.has(i);
+        const ok = span === 2 ? (col <= COLS - 2 && !occ.has(i) && !occ.has(i + 1)) : !occ.has(i);
         if (!ok) continue;
         const cell = document.createElement("div"); cell.className = "slot"; cell.dataset.slot = i;
         cell.style.gridColumn = span === 2 ? `${col + 1} / span 2` : `${col + 1}`; cell.style.gridRow = Math.floor(i / COLS) + 1; b.appendChild(cell);
@@ -552,7 +582,9 @@
 
   // ---- board delegated interactions (settings live inside a card) ----
   $("#board").addEventListener("input", e=>{ if (e.target.classList.contains("rateRange")){ intervalMs = +e.target.value; loop();
-    document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); } });
+    document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); }
+    else if (e.target.classList.contains("colsRange")){ setCols(+e.target.value);
+      document.querySelectorAll(".colsVal").forEach(x=>x.textContent=COLS); } });
   $("#board").addEventListener("click", e=>{
     if (pickMode){
       const cell = e.target.closest(".slot");
@@ -562,9 +594,16 @@
       return;
     }
     const sw = e.target.closest(".unitSwitch"); if (sw){ useC=!useC; if (last) boardUpdate(last); return; }
-    const mn = e.target.closest(".mini"); if (mn){ const on = !mn.classList.contains("on"); mn.classList.toggle("on", on);
-      if (mn.classList.contains("aot")){ aotOn = on; try { localStorage.setItem("cortex.aot", on ? "1" : "0"); } catch(_){} setAlwaysOnTop(on); } }
   });
+
+  // ---- always on top (header) ----
+  const aotBtn = $("#aotBtn");
+  function renderAot(){ aotBtn.classList.toggle("on", aotOn);
+    aotBtn.setAttribute("aria-pressed", aotOn ? "true" : "false");
+    aotBtn.title = aotOn ? "Always on top · on" : "Always on top · off"; }
+  aotBtn.addEventListener("click", e=>{ e.stopPropagation(); aotOn = !aotOn;
+    try { localStorage.setItem("cortex.aot", aotOn ? "1" : "0"); } catch(_){}
+    setAlwaysOnTop(aotOn); renderAot(); });
   document.addEventListener("click", e=>{ if (pickMode && !e.target.closest("#board")) exitPick(); });
   document.addEventListener("keydown", e=>{ if (e.key==="Escape" && pickMode) exitPick(); });
 
@@ -672,6 +711,8 @@
   function loop(){ clearInterval(timer); tick(); timer = setInterval(tick, intervalMs); }
   window.addEventListener("resize", drawCharts);
   if (aotOn) setAlwaysOnTop(true);
+  renderAot();
+  applyCols();
   loadSysinfo();
   loop();
 })();

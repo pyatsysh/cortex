@@ -5,7 +5,7 @@ from the Start menu — no admin needed to start, though installers will pop UAC
 
 The project is already on your Windows drive at:
 
-    C:\Users\pyats\projects\System_Monitor
+    C:\Users\pyats\projects\cortex
 
 ---
 
@@ -53,7 +53,7 @@ All four should print a version. If `rustc`/`cargo` aren't found, reopen the ter
 ## Step 3 — Go to the project
 
 ```powershell
-cd $HOME\projects\System_Monitor
+cd $HOME\projects\cortex
 ```
 
 ## Step 4 — Fetch the Tauri CLI
