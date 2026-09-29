@@ -6,7 +6,7 @@ It is built in Rust on Tauri, so it ships as a native window instead of a bundle
 
 Homepage: <https://pyatsysh.github.io/cortex/>
 
-> Status: built and tested so far only on Windows 11, developed under WSL. The Linux and macOS code paths are written and compile in principle but are unproven. See [Status](#status).
+> Status: built and used on Windows 11. On Linux it builds and its sampler is tested headless under WSL2; the Linux window on a native desktop and the macOS path are not yet proven. See [Status](#status).
 
 ## Why it exists
 
@@ -29,19 +29,38 @@ Cortex is the one window: GPU-first telemetry and your TensorBoard together, lig
 
 ## Status
 
-So far Cortex has been built and run only on **Windows 11**, developed under WSL. The Linux and macOS paths are written and should compile, but they have not been built or tested, so treat them as unproven. Two known gaps on Windows: CPU temperature needs a sensor helper and reads `--` until one is added, and GPU coverage is NVIDIA-only through NVML (AMD and Intel are not read yet).
+So far Cortex has been built and run as a window only on **Windows 11**, developed under WSL. On **Linux** (Ubuntu 24.04, checked under WSL2 on 27 September 2026) it builds, and its sampler is tested without a window: CPU, memory, disks, network and processes come from `/proc` and `/sys`, NVIDIA readings from NVML through the driver's `libnvidia-ml.so.1`, and a missing library, device or sensor reads as N/A rather than zero. The Linux window has not yet been observed on a native desktop, and the macOS path is unproven. Two known gaps on Windows: CPU temperature needs a sensor helper and reads `--` until one is added, and GPU coverage is NVIDIA-only through NVML (AMD and Intel are not read yet).
 
 ## Build
 
 Prerequisites: the Rust MSVC toolchain (<https://rustup.rs>), the Visual C++ build tools, Node.js, and WebView2 (already present on Windows 10/11).
 
 ```bash
-npm install
+npm ci
 npm run dev      # hot-reloading dev window
 npm run build    # native installers under src-tauri/target/release/bundle/
 ```
 
 The full Windows walkthrough is in [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
+
+On Linux (Ubuntu 24.04) the prerequisites are the Rust toolchain, Node.js and these packages:
+
+```bash
+sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libssl-dev
+```
+
+NVIDIA readings need only the driver (it provides `libnvidia-ml.so.1`); without it the GPU cards stay hidden and the report says N/A. To check a machine without opening the window:
+
+```bash
+src-tauri/target/release/cortex --probe --samples 5 --interval-ms 1000
+```
+
+It prints JSON lines: the system report, a list of capabilities (each `available`, `degraded`, `unavailable` or `disabled`, with the reason), then one reading per sample. `CORTEX_NVML_LIB` points it at a particular NVML library. The probe starts no window and no background process, and exits when done.
+
+See [RELEASING.md](RELEASING.md) for locked builds, installer artifacts and
+draft releases. Current Linux GUI evidence is limited to a virtual X display
+in WSL; a native desktop still needs testing.
 
 ## Roadmap
 

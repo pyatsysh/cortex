@@ -59,7 +59,7 @@ cd $HOME\projects\cortex
 ## Step 4 — Fetch the Tauri CLI
 
 ```powershell
-npm install
+npm ci
 ```
 
 ## Step 5 — Run it

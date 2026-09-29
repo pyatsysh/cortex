@@ -613,7 +613,7 @@
     $("#d-cpu-temp").textContent = showTemp(m.cpu.temp); $("#d-cpu-temp").style.color = tempColor(m.cpu.temp);
     $("#d-cpu-threads").textContent = m.cores.length;
     $("#d-cores").innerHTML = m.cores.map((c,i)=>
-      `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i></i></span><b>${Math.round(c.freq)} MHz</b><b>${c.util.toFixed(0)}%</b></div>`).join("");
+      `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i></i></span><b>${c.freq == null ? "—" : Math.round(c.freq) + " MHz"}</b><b>${c.util.toFixed(0)}%</b></div>`).join("");
     // Set bar widths via JS property, not an inline style="" attr: the app's CSP makes Tauri
     // inject a style nonce, which disables 'unsafe-inline', so inline styles added through
     // innerHTML get stripped and the bar defaults to 100%. JS-set styles aren't CSP-gated.
@@ -648,15 +648,17 @@
 
   // ---- system info ----
   function fmtUptime(s){ const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),mn=Math.floor(s%3600/60); return (d?d+"d ":"")+(h?h+"h ":"")+mn+"m"; }
+  // a clock the platform does not report arrives as null: say so rather than "0.00 GHz"
+  const ghz = mhz => mhz == null ? "clock N/A" : (mhz/1000).toFixed(2) + " GHz";
   async function loadSysinfo(){
     const s = inTauri ? await invoke("get_sysinfo") : demoSysinfo();
     sysInfo = s;
-    $("#i-os").textContent = s.os; $("#i-kernel").textContent = "Build / kernel " + s.kernel;
-    $("#i-cpu").textContent = s.cpu; $("#i-cpu2").textContent = `${s.cpu_threads} threads · ${(s.cpu_mhz/1000).toFixed(2)} GHz`;
+    $("#i-os").textContent = s.os + (s.wsl ? " (WSL)" : ""); $("#i-kernel").textContent = "Build / kernel " + s.kernel;
+    $("#i-cpu").textContent = s.cpu; $("#i-cpu2").textContent = `${s.cpu_threads} threads · ${ghz(s.cpu_mhz)}`;
     $("#i-gpu").textContent = s.gpu; $("#i-gpu2").textContent = "Driver " + s.gpu_driver + (s.cuda && s.cuda !== "—" ? " · CUDA " + s.cuda : "");
     $("#i-ram").textContent = s.ram_total.toFixed(1) + " GB";
     $("#i-host").textContent = s.hostname; $("#i-uptime").textContent = "Up " + fmtUptime(s.uptime) + " · " + s.arch;
-    sysinfoText = `Cortex — system report\nOS:   ${s.os} (${s.kernel})\nCPU:  ${s.cpu} (${s.cpu_threads} threads @ ${(s.cpu_mhz/1000).toFixed(2)} GHz)\nGPU:  ${s.gpu} (driver ${s.gpu_driver}, CUDA ${s.cuda})\nRAM:  ${s.ram_total.toFixed(1)} GB\nHost: ${s.hostname} · ${s.arch} · up ${fmtUptime(s.uptime)}`;
+    sysinfoText = `Cortex — system report\nOS:   ${s.os}${s.wsl ? " under WSL" : ""} (${s.kernel})\nCPU:  ${s.cpu} (${s.cpu_threads} threads @ ${ghz(s.cpu_mhz)})\nGPU:  ${s.gpu} (driver ${s.gpu_driver}, CUDA ${s.cuda})\nRAM:  ${s.ram_total.toFixed(1)} GB\nHost: ${s.hostname} · ${s.arch} · up ${fmtUptime(s.uptime)}`;
   }
   $("#btn-copy").addEventListener("click", async ()=>{ try { await navigator.clipboard.writeText(sysinfoText); const b=$("#btn-copy"); b.textContent="Copied!"; setTimeout(()=>b.textContent="Copy to clipboard",1200);}catch(_){} });
   $("#btn-print").addEventListener("click", ()=>window.print());
