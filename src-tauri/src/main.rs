@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use sysinfo::{Components, Disks, Networks, ProcessesToUpdate, System, ThreadKind};
+use sysinfo::{Components, CpuRefreshKind, Disks, Networks, ProcessesToUpdate, System, ThreadKind};
 use tauri::State;
 
 use nvml_wrapper::enum_wrappers::device::{Clock, TemperatureSensor};
@@ -308,6 +308,12 @@ fn disk_list(rows: impl IntoIterator<Item = DiskRow>) -> Vec<DiskInfo> {
 
 // ---- sampling ----
 
+/// What every sample refreshes for the CPUs: usage and the per-core clocks. `refresh_cpu_usage()`
+/// alone refreshes usage only, which left the clocks at the values read when the state was made.
+fn cpu_refresh() -> CpuRefreshKind {
+    CpuRefreshKind::nothing().with_cpu_usage().with_frequency()
+}
+
 fn new_state() -> AppState {
     let mut sys = System::new_all();
     sys.refresh_all();
@@ -327,7 +333,7 @@ fn sample(s: &mut AppState) -> Metrics {
     let elapsed = s.last.elapsed().as_secs_f32().max(0.001);
     s.last = Instant::now();
 
-    s.sys.refresh_cpu_usage();
+    s.sys.refresh_cpu_specifics(cpu_refresh());
     s.sys.refresh_memory();
     s.sys.refresh_processes(ProcessesToUpdate::All, true);
     s.networks.refresh(true);
@@ -662,19 +668,52 @@ fn run_probe(p: &ProbeArgs) -> std::io::Result<()> {
     Ok(())
 }
 
+const USAGE: &str = "\
+usage: cortex                       open the monitor window
+       cortex --probe [--samples N] [--interval-ms MS]
+                                    print readings as JSON lines; no window
+       cortex --help
+";
+
+/// What the command line asks for. Only an empty command line opens the window: anything not
+/// understood is refused, so `cortex --help` or a mistyped flag never puts a window on a desktop.
+enum Invocation {
+    Window,
+    Probe(ProbeArgs),
+    Help,
+}
+
+fn parse_args(args: &[String]) -> Result<Invocation, String> {
+    match args.first().map(String::as_str) {
+        None => Ok(Invocation::Window),
+        // Finder on older macOS passes a process serial number to an app it launches.
+        Some(a) if cfg!(target_os = "macos") && a.starts_with("-psn_") && args.len() == 1 => Ok(Invocation::Window),
+        Some("--probe") => parse_probe_args(args)
+            .map_err(|e| format!("--probe: {e}"))?
+            .map(Invocation::Probe)
+            .ok_or_else(|| "--probe was not parsed".to_string()),
+        Some("--help" | "-h") if args.len() == 1 => Ok(Invocation::Help),
+        Some(_) => Err(format!("unknown arguments: {}", args.join(" "))),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match parse_probe_args(&args) {
-        Ok(Some(p)) => {
+    match parse_args(&args) {
+        Ok(Invocation::Window) => {}
+        Ok(Invocation::Probe(p)) => {
             if let Err(e) = run_probe(&p) {
                 eprintln!("cortex --probe: {e}");
                 std::process::exit(1);
             }
             return;
         }
-        Ok(None) => {}
+        Ok(Invocation::Help) => {
+            print!("{USAGE}");
+            return;
+        }
         Err(e) => {
-            eprintln!("cortex --probe: {e}");
+            eprint!("cortex: {e}\n{USAGE}");
             std::process::exit(2);
         }
     }
@@ -689,6 +728,13 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_sample_refreshes_cpu_clocks_as_well_as_usage() {
+        let k = cpu_refresh();
+        assert!(k.cpu_usage(), "usage is refreshed");
+        assert!(k.frequency(), "clocks are refreshed, not kept from start-up");
+    }
 
     #[test]
     fn missing_nvml_library_is_reported_unavailable_not_zero() {
@@ -821,6 +867,20 @@ mod tests {
         let list = disk_list([row("/mnt/wslg/distro"), row("/"), row("/var/lib/docker/overlay")]);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "/");
+    }
+
+    #[test]
+    fn only_an_empty_command_line_opens_the_window() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(matches!(parse_args(&a(&[])), Ok(Invocation::Window)));
+        assert!(matches!(parse_args(&a(&["--probe", "--samples", "2"])), Ok(Invocation::Probe(_))));
+        for help in [&["--help"][..], &["-h"]] {
+            assert!(matches!(parse_args(&a(help)), Ok(Invocation::Help)), "{help:?}");
+        }
+        for refused in [&["--something-else"][..], &["--version"], &["--help", "extra"], &["file.txt"], &["--probe", "--rm"], &["-psn_0_12345", "x"]] {
+            assert!(parse_args(&a(refused)).is_err(), "{refused:?}");
+        }
+        assert_eq!(parse_args(&a(&["-psn_0_12345"])).is_ok(), cfg!(target_os = "macos"));
     }
 
     #[test]

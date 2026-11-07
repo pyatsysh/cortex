@@ -17,7 +17,7 @@ From the repository root:
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
-node --test .github/scripts/release.test.mjs
+node --test .github/scripts/release.test.mjs tests/board.test.mjs
 node .github/scripts/release.mjs check
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run build -- --ci --bundles deb -- --locked

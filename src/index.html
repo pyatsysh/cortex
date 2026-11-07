@@ -114,7 +114,8 @@
   .drive{margin-top:14px}
   .drive:first-child{margin-top:6px}
   .drive .row{display:flex; align-items:center; gap:12px}
-  .drive .lbl{font-size:14px; color:var(--dim); width:26px}
+  .drive .lbl{font-size:14px; color:var(--dim); flex:0 1 auto; min-width:26px; max-width:45%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}  /* Linux mount paths are long; full path in the tooltip */
   .bar{flex:1; height:9px; border-radius:6px; background:var(--track); overflow:hidden}
   .bar > i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--pink),var(--purple));
     transition:width .6s cubic-bezier(.4,0,.2,1)}
@@ -356,6 +357,10 @@
   const DPR = window.devicePixelRatio || 1;
   const inTauri = !!(window.__TAURI__ && window.__TAURI__.core);
   const invoke = (cmd) => window.__TAURI__.core.invoke(cmd);
+  // Process names, mount points and driver strings come from the machine, not from Cortex:
+  // anything written through innerHTML goes through esc() so it stays text.
+  const ESC = { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" };
+  const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ESC[c]);
 
   let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "", sysInfo = null, aotOn = false;
   try { aotOn = localStorage.getItem("cortex.aot") === "1"; } catch(_){}
@@ -404,13 +409,21 @@
     ctx.clearRect(0,0,w,h);
     ctx.strokeStyle = "rgba(216,222,233,.07)"; ctx.lineWidth = 1;
     for (let i=1;i<5;i++){ const x=w*i/5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    let drawn = false;
     series.forEach(s => {
-      if (!s.data.length) return;
-      const max = s.max || Math.max(1, ...s.data);
+      const vals = s.data.filter(v => v != null);
+      if (!vals.length) return;
+      const max = s.max || Math.max(1, ...vals);
       ctx.strokeStyle = s.color; ctx.lineWidth = 2*DPR; ctx.lineJoin = "round"; ctx.beginPath();
-      s.data.forEach((v,i) => { const x=w*i/(HIST-1), y=h-(Math.max(0,v)/max)*h*0.9-h*0.05; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-      ctx.stroke();
+      let pen = false;  // an unavailable reading breaks the line rather than dropping it to zero
+      s.data.forEach((v,i) => { if (v == null){ pen = false; return; }
+        const x=w*i/(HIST-1), y=h-(Math.max(0,v)/max)*h*0.9-h*0.05; pen?ctx.lineTo(x,y):ctx.moveTo(x,y); pen = true; });
+      ctx.stroke(); drawn = true;
     });
+    if (!drawn && series.some(s => s.data.length)){  // readings arrive but none is available
+      ctx.fillStyle = getCss("--faint"); ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = "center";
+      ctx.fillText("N/A", w/2, h/2);
+    }
   }
   function drawCharts(){
     if (activeView !== "detail") return;
@@ -433,7 +446,7 @@
       update(el,m){ updateRing(el, m.ram.util); el.querySelector(".rtext").textContent = `${m.ram.used.toFixed(1)} / ${m.ram.total.toFixed(1)} GB`; } },
     storage: { title:"Storage", span:1, body: `<div class="drives"></div>`,
       update(el,m){ const box=el.querySelector(".drives"); box.innerHTML = m.disks.map(d=>{ const up=100*(1-d.free/d.total);
-        return `<div class="drive"><div class="row"><div class="lbl">${d.name}</div><div class="bar"><i data-w="${up.toFixed(1)}"></i></div></div>
+        return `<div class="drive"><div class="row"><div class="lbl" title="${esc(d.name)}">${esc(d.name)}</div><div class="bar"><i data-w="${up.toFixed(1)}"></i></div></div>
         <div class="free">${fmtGB(d.free)} free of ${fmtGB(d.total)}</div></div>`; }).join("");
         box.querySelectorAll(".bar > i").forEach(i=>{ i.style.width = i.dataset.w + "%"; }); } },  // width via JS (CSP strips inline style attrs)
     network: { title:"Network", span:1, body: `<div class="net">
@@ -456,7 +469,7 @@
         el.querySelector(".colsVal").textContent=COLS; } },
     procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th class="pcpu">CPU</th><th class="pram">RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
       update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
-        <td class="l"><div class="proc"><span class="chip">${(p.name[0]||"?").toUpperCase()}</span><span class="nm" title="${p.name}">${p.name}</span></div></td>
+        <td class="l"><div class="proc"><span class="chip">${esc((p.name[0]||"?").toUpperCase())}</span><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span></div></td>
         <td class="pcpu">${p.cpu.toFixed(0)}%</td><td class="pram">${p.ram}MB</td></tr>`).join("");
         // chip colours via JS: the app CSP strips inline style="" attrs added through innerHTML
         el.querySelectorAll(".ptb .chip").forEach((c,i)=>{ if(m.procs[i]) c.style.background = m.procs[i].color; }); } },
@@ -468,7 +481,7 @@
       const t=el.querySelector(".t"); t.textContent=showTemp(g.temp); t.style.color=tempColor(g.temp);
       const vr=(g.vram_used!=null&&g.vram_total!=null)?`VRAM ${(g.vram_pct||0).toFixed(0)}% <b>(${g.vram_used.toFixed(1)}/${g.vram_total.toFixed(1)} GB)</b>`:"VRAM N/A";
       const pw=g.power!=null?` · <b>${g.power.toFixed(0)} W</b>`:"";
-      const drv=(sysInfo&&sysInfo.gpu_driver&&sysInfo.gpu_driver!=="—")?` · drv <b>${sysInfo.gpu_driver}</b>`:"";
+      const drv=(sysInfo&&sysInfo.gpu_driver&&sysInfo.gpu_driver!=="—")?` · drv <b>${esc(sysInfo.gpu_driver)}</b>`:"";
       el.querySelector(".gl").innerHTML = vr + pw + drv;
       const cnt=(m.gpus||[]).length; el.querySelector("h3").textContent = cnt>1?`GPU ${i}`:"GPU"; } });
   function defFor(k){ return k.startsWith("gpu") ? gpuDef(parseInt(k.slice(3))) : CARD_DEFS[k]; }
@@ -574,7 +587,7 @@
   function updateAddMenu(){
     const cnt = (last && last.gpus) ? last.gpus.length : 1;
     const hid = [...hidden].filter(k => k.startsWith("gpu") ? parseInt(k.slice(3)) < cnt : STATIC_KEYS.includes(k));
-    addMenu.innerHTML = hid.length ? hid.map(k=>`<button data-k="${k}">${defTitle(k)}</button>`).join("") : `<div class="empty">All cards shown</div>`;
+    addMenu.innerHTML = hid.length ? hid.map(k=>`<button data-k="${esc(k)}">${esc(defTitle(k))}</button>`).join("") : `<div class="empty">All cards shown</div>`;
   }
   $("#addBtn").addEventListener("click", e=>{ e.stopPropagation(); updateAddMenu(); addMenu.hidden = !addMenu.hidden; });
   addMenu.addEventListener("click", e=>{ const b=e.target.closest("button[data-k]"); if (!b) return; hidden.delete(b.dataset.k); save(); lastSig=""; addMenu.hidden=true; if (last) boardUpdate(last); });
@@ -640,7 +653,7 @@
     if (!m) return; last = m;
     const g0 = (m.gpus && m.gpus[0]) || {};
     const hint=$("#tb-hint"); if (hint){ const gu=g0.util; hint.textContent = gu==null ? "GPU activity: N/A" : (gu>25 ? `GPU 0 at ${Math.round(gu)}% — a workload is running` : `GPU 0 at ${Math.round(gu)}% — idle, no training detected`); }
-    push(hist.cpu, m.cpu.util); push(hist.gpuU, g0.util ?? 0); push(hist.gpuM, g0.mem_util ?? 0);
+    push(hist.cpu, m.cpu.util); push(hist.gpuU, g0.util ?? null); push(hist.gpuM, g0.mem_util ?? null);  // null: unavailable, drawn as a gap
     push(hist.ram, m.ram.util); push(hist.up, m.net.up); push(hist.down, m.net.down);
     boardUpdate(m);
     if (activeView === "detail") updateDetail(m);

@@ -11,9 +11,19 @@ fn fake_home() -> PathBuf {
     home
 }
 
+/// The binary under test never sees a display or a session bus: a regression that opened a
+/// window would then fail here instead of appearing on the desktop of whoever runs the tests.
+fn cortex() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_cortex"));
+    for v in ["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS"] {
+        c.env_remove(v);
+    }
+    c
+}
+
 fn probe(extra_env: &[(&str, &OsStr)], args: &[&str]) -> Output {
     let home = fake_home();
-    let mut c = Command::new(env!("CARGO_BIN_EXE_cortex"));
+    let mut c = cortex();
     c.arg("--probe")
         .args(args)
         .env("HOME", &home)
@@ -76,9 +86,90 @@ fn probe_without_nvidia_library_reports_gpu_unavailable_and_no_stand_in_zeros() 
 }
 
 #[test]
+fn help_prints_usage_and_opens_no_window() {
+    for flag in ["--help", "-h"] {
+        let out = cortex().arg(flag).env("HOME", fake_home()).output().expect("cortex runs");
+        assert_eq!(out.status.code(), Some(0), "{flag}: {}", String::from_utf8_lossy(&out.stderr));
+        let usage = String::from_utf8_lossy(&out.stdout);
+        assert!(usage.starts_with("usage: cortex") && usage.contains("--probe"), "{flag}: {usage}");
+        assert!(out.stderr.is_empty(), "{flag}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+}
+
+#[test]
+fn any_other_argument_is_refused_with_usage_and_exit_2() {
+    for args in [&["--version"][..], &["--helpp"], &["--help", "extra"], &["file.txt"], &["-x"]] {
+        let out = cortex().args(args).env("HOME", fake_home()).output().expect("cortex runs");
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("unknown arguments") && err.contains("usage: cortex"), "{args:?}: {err}");
+        assert!(out.stdout.is_empty(), "{args:?}");
+    }
+}
+
+#[test]
 fn probe_refuses_bad_arguments_with_exit_2() {
     let out = probe(&[], &["--samples", "zero"]);
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--samples"));
     assert!(out.stdout.is_empty());
+}
+
+/// Each sample re-reads the per-core clocks (they once stayed at the start-up values for the whole
+/// run). The kernel's cpufreq files are read as each sample arrives; if they moved during the run,
+/// the probe's clocks must have moved too. Skips where there is no cpufreq or nothing moved.
+#[cfg(target_os = "linux")]
+#[test]
+fn probe_clocks_move_when_the_kernel_clocks_move() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    let kernel = || -> Option<Vec<u64>> {
+        (0..)
+            .map_while(|i| {
+                let cpu = format!("/sys/devices/system/cpu/cpu{i}");
+                Path::new(&cpu).exists().then(|| {
+                    std::fs::read_to_string(format!("{cpu}/cpufreq/scaling_cur_freq"))
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                })
+            })
+            .collect()
+    };
+    if kernel().map_or(true, |v| v.is_empty()) {
+        eprintln!("skipped: no cpufreq clocks on this machine");
+        return;
+    }
+    let home = fake_home();
+    let mut child = cortex()
+        .args(["--probe", "--samples", "8", "--interval-ms", "150"])
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("XDG_DATA_HOME", home.join(".local/share"))
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("probe runs");
+    let (mut probe_clocks, mut kernel_clocks) = (Vec::new(), Vec::new());
+    for line in BufReader::new(child.stdout.take().unwrap()).lines() {
+        let v: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
+        if v["kind"] == "metrics" {
+            kernel_clocks.push(kernel());
+            let cores: Vec<Option<u64>> = v["data"]["cores"].as_array().unwrap().iter().map(|c| c["freq"].as_u64()).collect();
+            probe_clocks.push(cores);
+        }
+    }
+    assert!(child.wait().unwrap().success());
+    assert_eq!(probe_clocks.len(), 8);
+    fn distinct<T: std::hash::Hash + Eq>(xs: &[T]) -> usize {
+        xs.iter().collect::<std::collections::HashSet<_>>().len()
+    }
+    if distinct(&kernel_clocks) < 2 {
+        eprintln!("skipped: the kernel's clocks did not move during the run");
+        return;
+    }
+    assert!(
+        distinct(&probe_clocks) > 1,
+        "the probe repeated {:?} for every sample while the kernel's clocks moved: {:?}",
+        probe_clocks[0],
+        kernel_clocks
+    );
 }
