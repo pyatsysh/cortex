@@ -15,7 +15,7 @@ class El {
     Object.assign(this, { tag, html: "", kids: {}, style: {}, dataset: {}, hidden: false, value: "", textContent: "", title: "" });
     this.classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
   }
-  set innerHTML(v) { this.html = String(v); this.kids = {}; }
+  set innerHTML(v) { this.html = String(v); this.kids = {}; this.writes = (this.writes || 0) + 1; }
   get innerHTML() { return this.html; }
   querySelector(sel) { return (this.kids[sel] ??= new El()); }
   querySelectorAll() { return []; }
@@ -39,7 +39,7 @@ class Canvas extends El {
   get clientHeight() { return 120; }
 }
 
-async function renderBoard(metrics, sysinfo) {
+async function renderBoard(metrics, sysinfo, options = {}) {
   const created = [];
   const byId = {};
   const modes = ["dash", "detail", "info", "training"].map(view => Object.assign(new El(), { dataset: { view } }));
@@ -48,18 +48,19 @@ async function renderBoard(metrics, sysinfo) {
     getElementById: id => (byId["#" + id] ??= new El()),
     querySelectorAll: sel => (sel === ".mode" ? modes : []),
     createElement: tag => { const e = new El(tag); created.push(e); return e; },
-    addEventListener() {},
+    addEventListener(type, fn) { (this.handlers ??= {})[type] = fn; },
     documentElement: new El(),
     activeElement: null,
   };
   const store = {};
+  let poll, frames = 0, metricCalls = 0;
   const sandbox = {
     document,
     matchMedia: () => ({ matches: false }),
     localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } },
     getComputedStyle: () => ({ getPropertyValue: () => "" }),
-    requestAnimationFrame() {},
-    setInterval: () => 0,
+    requestAnimationFrame() { frames++; },
+    setInterval: fn => { poll = fn; return 0; },
     clearInterval() {},
     setTimeout: () => 0,
     performance: { now: () => 0 },
@@ -67,7 +68,7 @@ async function renderBoard(metrics, sysinfo) {
     devicePixelRatio: 1,
     addEventListener() {},
     __TAURI__: {
-      core: { invoke: cmd => Promise.resolve(cmd === "get_metrics" ? metrics : sysinfo) },
+      core: { invoke: cmd => { if (cmd === "get_metrics") { metricCalls++; return options.getMetrics ? options.getMetrics() : Promise.resolve(metrics); } return Promise.resolve(sysinfo); } },
       window: { getCurrentWindow: () => ({ setAlwaysOnTop() {} }) },
     },
   };
@@ -77,9 +78,12 @@ async function renderBoard(metrics, sysinfo) {
   for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
   const card = key => created.find(e => e.dataset.key === key);
   return {
-    procs: card("procs").kids[".ptb"].innerHTML,
-    drives: card("storage").kids[".drives"].innerHTML,
-    gpuLine: card("gpu0")?.kids[".gl"].innerHTML,
+    get procs() { return card("procs").kids[".ptb"].innerHTML; },
+    get drives() { return card("storage").kids[".drives"].innerHTML; },
+    get gpuLine() { return card("gpu0")?.kids[".gl"].innerHTML; },
+    card, poll: () => poll(), document,
+    get frames() { return frames; },
+    get metricCalls() { return metricCalls; },
     showView: view => modes.find(m => m.dataset.view === view).handlers.click(),
     chartCalls: sel => (byId[sel] ??= new Canvas()).calls,
   };
@@ -138,4 +142,95 @@ test("an available GPU still draws both lines on the Detailed chart", async () =
   const calls = board.chartCalls("#chart-gpu");
   assert.equal(moveTos(calls), 6, "grid plus the engine and memory lines");
   assert.ok(!calls.some(c => c[0] === "fillText"), "no N/A label");
+});
+
+test("unchanged readings retain their DOM and changed readings appear without animation", async () => {
+  let current = metrics;
+  const board = await renderBoard(metrics, sysinfo, { getMetrics: () => Promise.resolve(current) });
+  const cpu = board.card("cpu").kids[".val"];
+  const procs = board.card("procs").kids[".ptb"];
+  const storage = board.card("storage").kids[".drives"];
+  const writes = [cpu.writes, procs.writes, storage.writes];
+  await board.poll();
+  assert.deepEqual([cpu.writes, procs.writes, storage.writes], writes);
+  current = { ...metrics, cpu: { ...metrics.cpu, util: 67.1 }, net: { up: 16.8, down: 4.2 } };
+  await board.poll();
+  assert.equal(cpu.innerHTML, "67<small>%</small>");
+  assert.equal(board.card("network").kids[".nu"].innerHTML, "16.8");
+  assert.equal(cpu.writes, writes[0] + 1);
+  assert.equal(board.frames, 0, "no intermediate numeric frames");
+});
+
+test("slow and failed samples cannot accumulate concurrent requests", async () => {
+  let resolve, reject;
+  const board = await renderBoard(metrics, sysinfo, { getMetrics: () => new Promise((yes, no) => { resolve = yes; reject = no; }) });
+  assert.equal(board.metricCalls, 1);
+  await board.poll(); await board.poll();
+  assert.equal(board.metricCalls, 1, "one request remains in flight");
+  resolve(metrics);
+  await new Promise(r => setImmediate(r));
+  const failed = board.poll();
+  assert.equal(board.metricCalls, 2);
+  reject(new Error("synthetic unavailable backend"));
+  await failed;
+  const recovered = board.poll();
+  assert.equal(board.metricCalls, 3, "failure releases the sampling guard");
+  resolve(metrics); await recovered;
+});
+
+test("hidden windows stop sampling and refresh when visible", async () => {
+  const board = await renderBoard(metrics, sysinfo);
+  board.document.hidden = true;
+  await board.poll(); await board.poll();
+  assert.equal(board.metricCalls, 1);
+  board.document.hidden = false;
+  board.document.handlers.visibilitychange();
+  await new Promise(r => setImmediate(r));
+  assert.equal(board.metricCalls, 2);
+});
+
+test("an inactive dashboard stays untouched and receives the latest sample on return", async () => {
+  let current = metrics;
+  const board = await renderBoard(metrics, sysinfo, { getMetrics: () => Promise.resolve(current) });
+  const cpu = board.card("cpu").kids[".val"], before = cpu.writes;
+  board.showView("info");
+  current = { ...metrics, cpu: { ...metrics.cpu, util: 81 } };
+  await board.poll();
+  assert.equal(cpu.writes, before);
+  board.showView("dash");
+  assert.equal(cpu.innerHTML, "81<small>%</small>");
+});
+
+// The R1 review, 16 October 2026 (C1): sampling pauses while the window is hidden, so the samples of that interval
+// are missing. Every chart must show the break, rather than join the samples either side of it into a line that
+// hides a stall.
+test("a hidden interval is a gap in every chart, never a continuous line", async () => {
+  const board = await renderBoard(metrics, sysinfo);
+  await board.poll();
+  board.document.hidden = true;
+  await board.poll(); await board.poll();
+  board.document.hidden = false;
+  board.document.handlers.visibilitychange();
+  for (let i = 0; i < 3; i++) await new Promise(r => setImmediate(r));
+  board.showView("detail");
+  assert.equal(moveTos(board.chartCalls("#chart-cpu")), 6, "the grid, then one line broken once");
+  assert.equal(moveTos(board.chartCalls("#chart-ram")), 6, "the grid, then one line broken once");
+  assert.equal(moveTos(board.chartCalls("#chart-gpu")), 8, "engine and memory lines, each broken once");
+  assert.equal(moveTos(board.chartCalls("#chart-net")), 8, "up and down lines, each broken once");
+});
+
+// C2: a get_metrics call that never answers holds the sampling guard. The status must not go on saying Live.
+test("a sample that never returns makes the status stale until one does", async () => {
+  let answer;
+  const board = await renderBoard(metrics, sysinfo, { getMetrics: () => new Promise(yes => { answer = yes; }) });
+  const dot = board.document.querySelector("#statusDot");
+  assert.equal(dot.title, "Live");
+  await board.poll(); await board.poll();
+  assert.equal(dot.title, "Live", "two intervals are not yet stale");
+  await board.poll();
+  assert.match(dot.title, /^Stale/);
+  assert.equal(board.metricCalls, 1, "still one request in flight");
+  answer(metrics);
+  for (let i = 0; i < 3; i++) await new Promise(r => setImmediate(r));
+  assert.equal(dot.title, "Live", "a completed sample restores Live");
 });

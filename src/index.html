@@ -37,6 +37,7 @@
   .brand b{font-size:17px; letter-spacing:.14em; font-weight:800}
   .statusdot{width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); flex:none}
   .statusdot.demo{background:var(--amber); box-shadow:0 0 8px var(--amber)}
+  .statusdot.stale{background:var(--faint); box-shadow:none}
 
   .modes{display:flex; gap:8px; margin-left:8px}
   .mode{width:38px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--dim);
@@ -97,7 +98,7 @@
   .ringwrap{flex:1; display:grid; place-items:center; position:relative; margin:4px 0}
   .ring{width:138px; height:138px; transform:rotate(-90deg)}
   .ring .track{fill:none; stroke:var(--track); stroke-width:9}
-  .ring .prog{fill:none; stroke-width:9; stroke-linecap:round; transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)}
+  .ring .prog{fill:none; stroke-width:9; stroke-linecap:round}
   .ringlabel{position:absolute; inset:0; display:grid; place-content:center; text-align:center}
   .ringlabel .val{font-size:34px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1}
   .ringlabel .val small{font-size:17px; font-weight:700; margin-left:1px}
@@ -117,8 +118,7 @@
   .drive .lbl{font-size:14px; color:var(--dim); flex:0 1 auto; min-width:26px; max-width:45%;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}  /* Linux mount paths are long; full path in the tooltip */
   .bar{flex:1; height:9px; border-radius:6px; background:var(--track); overflow:hidden}
-  .bar > i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--pink),var(--purple));
-    transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .bar > i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--pink),var(--purple))}
   .drive .free{font-size:12px; color:var(--faint); margin-top:6px; margin-left:38px}
 
   /* settings */
@@ -175,7 +175,7 @@
   .corerow{display:grid; grid-template-columns:52px 1fr 76px 44px; gap:12px; align-items:center; font-size:12.5px; color:var(--dim); padding:3px 0}
   .corerow b{color:var(--txt); font-variant-numeric:tabular-nums; font-weight:600; text-align:right}
   .cbar{height:6px; border-radius:4px; background:var(--track); overflow:hidden}
-  .cbar > i{display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,var(--pink),var(--purple)); transition:width .3s ease}
+  .cbar > i{display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,var(--pink),var(--purple))}
   .dchart canvas{width:100%; height:158px; display:block; background:#232833; border:1px solid var(--line); border-radius:8px}
   .legend{display:flex; gap:16px; margin-top:9px; font-size:12px; color:var(--dim)}
   .legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle}
@@ -353,7 +353,6 @@
   "use strict";
   const $ = s => document.querySelector(s);
   const C = 2 * Math.PI * 68;
-  const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
   const DPR = window.devicePixelRatio || 1;
   const inTauri = !!(window.__TAURI__ && window.__TAURI__.core);
   const invoke = (cmd) => window.__TAURI__.core.invoke(cmd);
@@ -382,18 +381,16 @@
   const fmtGB = gb => gb >= 1024 ? (gb/1024).toFixed(1) + " TB" : gb.toFixed(1) + " GB";
   const clamp = v => Math.max(0, Math.min(100, v));
   function setRingIn(wrap, pct){ const p = wrap && wrap.querySelector(".prog"); if (p) p.style.strokeDashoffset = C * (1 - clamp(pct)/100); }
-  const disp = {};
-  function tween(el, to, fmt){
-    const from = disp[el._k] ?? to; disp[el._k] = to;
-    if (reduce || Math.abs(to - from) < 0.5){ el.innerHTML = fmt(to); return; }
-    const t0 = performance.now(), d = 450;
-    (function step(t){ const k = Math.min(1,(t-t0)/d), e = 1-Math.pow(1-k,3); el.innerHTML = fmt(from+(to-from)*e); if (k<1) requestAnimationFrame(step); })(performance.now());
+  // A monitor shows measured values, without animating intermediate readings.
+  // Do not replace unchanged markup: that also preserves the existing DOM nodes.
+  function setHTML(el, html){
+    if (el._html !== html){ el.innerHTML = html; el._html = html; }
   }
   function updateRing(el, util){
-    const val = el.querySelector(".val"); val._k = el.dataset.key;
+    const val = el.querySelector(".val");
     const wrap = el.querySelector(".ringwrap");
-    if (util == null){ val.innerHTML = "N/A"; setRingIn(wrap, 0); }
-    else { tween(val, util, v => Math.round(v) + "<small>%</small>"); setRingIn(wrap, util); }
+    if (util == null){ setHTML(val, "N/A"); setRingIn(wrap, 0); }
+    else { setHTML(val, Math.round(util) + "<small>%</small>"); setRingIn(wrap, util); }
   }
 
   // ---- history + charts ----
@@ -445,15 +442,14 @@
     ram: { title:"RAM", span:1, body: ringSVG("ram") + `<div class="subline rtext">-- / -- GB</div>`,
       update(el,m){ updateRing(el, m.ram.util); el.querySelector(".rtext").textContent = `${m.ram.used.toFixed(1)} / ${m.ram.total.toFixed(1)} GB`; } },
     storage: { title:"Storage", span:1, body: `<div class="drives"></div>`,
-      update(el,m){ const box=el.querySelector(".drives"); box.innerHTML = m.disks.map(d=>{ const up=100*(1-d.free/d.total);
+      update(el,m){ const box=el.querySelector(".drives"); setHTML(box, m.disks.map(d=>{ const up=100*(1-d.free/d.total);
         return `<div class="drive"><div class="row"><div class="lbl" title="${esc(d.name)}">${esc(d.name)}</div><div class="bar"><i data-w="${up.toFixed(1)}"></i></div></div>
-        <div class="free">${fmtGB(d.free)} free of ${fmtGB(d.total)}</div></div>`; }).join("");
+        <div class="free">${fmtGB(d.free)} free of ${fmtGB(d.total)}</div></div>`; }).join(""));
         box.querySelectorAll(".bar > i").forEach(i=>{ i.style.width = i.dataset.w + "%"; }); } },  // width via JS (CSP strips inline style attrs)
     network: { title:"Network", span:1, body: `<div class="net">
       <div class="nrow up"><div class="big nu">0.0</div><div class="meta"><span class="u"><span class="dot"></span>Upload</span><small>Mbps</small></div></div>
       <div class="nrow down"><div class="big nd">0.0</div><div class="meta"><span class="u"><span class="dot"></span>Download</span><small>Mbps</small></div></div></div>`,
-      update(el,m){ const u=el.querySelector(".nu"), d=el.querySelector(".nd"); u._k="net-up"; d._k="net-down";
-        tween(u, m.net.up, v=>v.toFixed(1)); tween(d, m.net.down, v=>v.toFixed(1)); } },
+      update(el,m){ setHTML(el.querySelector(".nu"), m.net.up.toFixed(1)); setHTML(el.querySelector(".nd"), m.net.down.toFixed(1)); } },
     settings: { title:"Settings", span:1, body: `
       <div class="field"><div class="k">Update interval &middot; <span class="rateVal">1.0s</span></div>
         <input type="range" class="slider rateRange" min="500" max="10000" step="500" value="1000"></div>
@@ -468,9 +464,9 @@
         const cr=el.querySelector(".colsRange"); if (document.activeElement!==cr) cr.value=COLS;
         el.querySelector(".colsVal").textContent=COLS; } },
     procs: { title:"Top Processes", span:1, body: `<table><thead><tr><th class="l">Name</th><th class="pcpu">CPU</th><th class="pram">RAM</th></tr></thead><tbody class="ptb"></tbody></table>`,
-      update(el,m){ el.querySelector(".ptb").innerHTML = m.procs.slice(0,5).map(p=>`<tr>
+      update(el,m){ setHTML(el.querySelector(".ptb"), m.procs.slice(0,5).map(p=>`<tr>
         <td class="l"><div class="proc"><span class="chip">${esc((p.name[0]||"?").toUpperCase())}</span><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span></div></td>
-        <td class="pcpu">${p.cpu.toFixed(0)}%</td><td class="pram">${p.ram}MB</td></tr>`).join("");
+        <td class="pcpu">${p.cpu.toFixed(0)}%</td><td class="pram">${p.ram}MB</td></tr>`).join(""));
         // chip colours via JS: the app CSP strips inline style="" attrs added through innerHTML
         el.querySelectorAll(".ptb .chip").forEach((c,i)=>{ if(m.procs[i]) c.style.background = m.procs[i].color; }); } },
   };
@@ -482,7 +478,7 @@
       const vr=(g.vram_used!=null&&g.vram_total!=null)?`VRAM ${(g.vram_pct||0).toFixed(0)}% <b>(${g.vram_used.toFixed(1)}/${g.vram_total.toFixed(1)} GB)</b>`:"VRAM N/A";
       const pw=g.power!=null?` · <b>${g.power.toFixed(0)} W</b>`:"";
       const drv=(sysInfo&&sysInfo.gpu_driver&&sysInfo.gpu_driver!=="—")?` · drv <b>${esc(sysInfo.gpu_driver)}</b>`:"";
-      el.querySelector(".gl").innerHTML = vr + pw + drv;
+      setHTML(el.querySelector(".gl"), vr + pw + drv);
       const cnt=(m.gpus||[]).length; el.querySelector("h3").textContent = cnt>1?`GPU ${i}`:"GPU"; } });
   function defFor(k){ return k.startsWith("gpu") ? gpuDef(parseInt(k.slice(3))) : CARD_DEFS[k]; }
   function defTitle(k){ if (k.startsWith("gpu")){ const c=(last&&last.gpus?last.gpus.length:1); return c>1?`GPU ${parseInt(k.slice(3))}`:"GPU"; } return CARD_DEFS[k].title; }
@@ -625,8 +621,8 @@
     $("#d-cpu-util").textContent = m.cpu.util.toFixed(1) + "%";
     $("#d-cpu-temp").textContent = showTemp(m.cpu.temp); $("#d-cpu-temp").style.color = tempColor(m.cpu.temp);
     $("#d-cpu-threads").textContent = m.cores.length;
-    $("#d-cores").innerHTML = m.cores.map((c,i)=>
-      `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i></i></span><b>${c.freq == null ? "—" : Math.round(c.freq) + " MHz"}</b><b>${c.util.toFixed(0)}%</b></div>`).join("");
+    setHTML($("#d-cores"), m.cores.map((c,i)=>
+      `<div class="corerow"><span>Core ${i+1}</span><span class="cbar"><i></i></span><b>${c.freq == null ? "—" : Math.round(c.freq) + " MHz"}</b><b>${c.util.toFixed(0)}%</b></div>`).join(""));
     // Set bar widths via JS property, not an inline style="" attr: the app's CSP makes Tauri
     // inject a style nonce, which disables 'unsafe-inline', so inline styles added through
     // innerHTML get stripped and the bar defaults to 100%. JS-set styles aren't CSP-gated.
@@ -655,7 +651,7 @@
     const hint=$("#tb-hint"); if (hint){ const gu=g0.util; hint.textContent = gu==null ? "GPU activity: N/A" : (gu>25 ? `GPU 0 at ${Math.round(gu)}% — a workload is running` : `GPU 0 at ${Math.round(gu)}% — idle, no training detected`); }
     push(hist.cpu, m.cpu.util); push(hist.gpuU, g0.util ?? null); push(hist.gpuM, g0.mem_util ?? null);  // null: unavailable, drawn as a gap
     push(hist.ram, m.ram.util); push(hist.up, m.net.up); push(hist.down, m.net.down);
-    boardUpdate(m);
+    if (activeView === "dash") boardUpdate(m);
     if (activeView === "detail") updateDetail(m);
   }
 
@@ -687,6 +683,7 @@
     activeView = md.dataset.view;
     document.querySelectorAll(".view").forEach(v=>v.hidden = (v.id !== "view-"+activeView));
     if (activeView === "detail" && last) updateDetail(last);
+    if (activeView === "dash" && last) boardUpdate(last);
   }));
   document.querySelectorAll(".dhead").forEach(h => h.addEventListener("click", ()=>{ h.parentElement.classList.toggle("collapsed"); if (activeView==="detail" && last) drawCharts(); }));
 
@@ -722,8 +719,27 @@
   // ---- loop ----
   if (inTauri){ const d=$("#statusDot"); d.classList.remove("demo"); d.title = "Live"; }
   async function fetchMetrics(){ if (inTauri){ try { return await invoke("get_metrics"); } catch(e){ $("#statusDot").title = "Backend error: " + e; return null; } } return demo(); }
-  async function tick(){ render(await fetchMetrics()); }
+  // Nothing is sampled while the window is hidden, so the first sample after it starts a gap in every chart rather
+  // than joining the samples either side. A sample still unanswered after STALE_AFTER intervals turns the status
+  // stale; the next completed sample makes it live again.
+  const STALE_AFTER = 3;
+  let sampling = false, missed = false, waited = 0;
+  function showLive(live){ const d=$("#statusDot"); d.classList.toggle("stale", !live);
+    if (inTauri) d.title = live ? "Live" : `Stale: no sample for ${waited} intervals`; }
+  async function tick(){
+    if (document.hidden){ missed = true; return; }
+    if (sampling){ if (++waited >= STALE_AFTER) showLive(false); return; }
+    sampling = true;
+    try {
+      const m = await fetchMetrics();
+      if (document.hidden){ missed = true; return; }
+      if (m){ if (missed){ Object.values(hist).forEach(a => push(a, null)); missed = false; } showLive(true); }
+      render(m);
+    }
+    finally { sampling = false; waited = 0; }
+  }
   function loop(){ clearInterval(timer); tick(); timer = setInterval(tick, intervalMs); }
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) tick(); });
   window.addEventListener("resize", drawCharts);
   if (aotOn) setAlwaysOnTop(true);
   renderAot();

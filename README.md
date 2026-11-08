@@ -16,8 +16,17 @@ Cortex is the one window: GPU-first telemetry and your TensorBoard together, lig
 
 ## For training runs
 
+Readings update directly at the selected interval, without animated intermediate
+numbers or gauges. Only the visible view is redrawn, unchanged markup is retained,
+and a slow sample cannot queue further samples. A hidden window pauses sampling
+and refreshes when shown again; the charts show the hidden interval as a gap. A
+sample that has not answered for three intervals turns the status from Live to
+stale. CPU temperature is read each sample; new sensors
+are discovered within 30 seconds. Top Processes reports CPU as a percentage of
+one logical core, so 25% there is not a quarter of a multicore machine's capacity.
+
 - **Every GPU, in full.** Each NVIDIA device gets its own card: utilisation, temperature, power in watts, VRAM used against total, core and memory clocks, and the installed driver and CUDA version (the first thing a framework checks). A four-GPU box gets four cards.
-- **Alive or stalled, at a glance.** The Training tab reads GPU utilisation continuously, so you can see whether the GPUs are working or the run has died before you open a single loss curve.
+- **Alive or stalled, at a glance.** The Training tab reads GPU utilisation at every interval while Cortex is shown, and marks any interval it spent hidden as a gap, so you can see whether the GPUs are working or the run has died before you open a single loss curve.
 - **Your TensorBoard, alongside.** The Training tab connects to the TensorBoard you run on localhost, so the training metrics live next to the hardware that produces them.
 - **Nothing leaves the box.** Cortex reads the operating system's counters and the NVIDIA driver, then draws them. The only address it will ever load is the TensorBoard server you name yourself, on localhost.
 
@@ -67,7 +76,7 @@ in WSL; a native desktop still needs testing.
 - **Now:** the GPU-first card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab with the TensorBoard embed and the alive-or-stalled GPU signal.
 - **Next:** per-process VRAM, so you can see which training process owns which card; alerts for imminent VRAM exhaustion, thermal throttling and a stalled run; the Windows CPU and motherboard temperature helper.
 - **Then:** native ingestion of TensorBoard's scalar files, so loss and accuracy curves sit on the board beside the GPU telemetry with no browser at all; AMD and Intel GPUs; remote monitoring of a headless training box over the network.
-- **Eventually:** real Linux and macOS builds, and one-line installs (`winget`, `brew`, Flathub).
+- **Further qualification:** observe the Linux window on a native desktop; establish the macOS build and runtime path. One-line installs (`winget`, `brew`, Flathub) remain proposals. Linux builds already exist; build success alone is not desktop acceptance.
 
 ## Licence
 

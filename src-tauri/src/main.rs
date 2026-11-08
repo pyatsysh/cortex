@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use sysinfo::{Components, CpuRefreshKind, Disks, Networks, ProcessesToUpdate, System, ThreadKind};
+use sysinfo::{Components, CpuRefreshKind, Disks, Networks, ProcessRefreshKind, ProcessesToUpdate, System, ThreadKind};
 use tauri::State;
 
 use nvml_wrapper::enum_wrappers::device::{Clock, TemperatureSensor};
@@ -144,6 +144,8 @@ fn is_wsl() -> bool {
 struct AppState {
     sys: System,
     networks: Networks,
+    components: Components,
+    sensor_list_at: Instant,
     nvml: Option<Nvml>,
     nvml_status: Capability,
     last: Instant,
@@ -204,13 +206,15 @@ fn plausible_temp(t: f32) -> Option<f32> {
 }
 
 /// CPU temperature: the hottest plausible reading among CPU/package sensors.
+fn is_cpu_sensor(label: &str) -> bool {
+    let l = label.to_lowercase();
+    l.contains("cpu") || l.contains("package") || l.contains("tctl") || l.contains("core")
+}
+
 fn cpu_temp_from<'a>(readings: impl IntoIterator<Item = (&'a str, Option<f32>)>) -> Option<f32> {
     readings
         .into_iter()
-        .filter(|(label, _)| {
-            let l = label.to_lowercase();
-            l.contains("cpu") || l.contains("package") || l.contains("tctl") || l.contains("core")
-        })
+        .filter(|(label, _)| is_cpu_sensor(label))
         .filter_map(|(_, t)| t.and_then(plausible_temp))
         .fold(None, |acc: Option<f32>, t| Some(acc.map_or(t, |m| m.max(t))))
 }
@@ -314,13 +318,23 @@ fn cpu_refresh() -> CpuRefreshKind {
     CpuRefreshKind::nothing().with_cpu_usage().with_frequency()
 }
 
+// The process card needs CPU and resident memory, not executable paths, disk IO,
+// command lines or environments. Keep the same process CPU delta and name source.
+fn process_refresh() -> ProcessRefreshKind {
+    ProcessRefreshKind::nothing().with_cpu().with_memory()
+}
+
 fn new_state() -> AppState {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    let mut sys = System::new();
+    sys.refresh_cpu_specifics(cpu_refresh());
+    sys.refresh_memory();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh());
     let (nvml, nvml_status) = load_nvml(&nvml_candidates(std::env::var_os("CORTEX_NVML_LIB")));
     AppState {
         sys,
         networks: Networks::new_with_refreshed_list(),
+        components: Components::new_with_refreshed_list(),
+        sensor_list_at: Instant::now(),
         nvml, // None on machines without a loadable NVIDIA driver
         nvml_status,
         last: Instant::now(),
@@ -335,7 +349,7 @@ fn sample(s: &mut AppState) -> Metrics {
 
     s.sys.refresh_cpu_specifics(cpu_refresh());
     s.sys.refresh_memory();
-    s.sys.refresh_processes(ProcessesToUpdate::All, true);
+    s.sys.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh());
     s.networks.refresh(true);
 
     // CPU (global + per-core). On Windows sysinfo returns only the static *base*
@@ -421,10 +435,18 @@ fn sample(s: &mut AppState) -> Metrics {
         }
     }
 
-    // Temperatures (built fresh each tick; cheap at ~1 Hz). Windows often has no sensor
-    // without a driver, WSL has none at all; both are handled as None in the UI.
-    let components = Components::new_with_refreshed_list();
-    let cpu_temp = cpu_temp_from(components.iter().map(|c| (c.label(), c.temperature())));
+    // Rediscover sensors every 30 s so hotplug/driver changes appear. Between
+    // discoveries read only the CPU sensors we display, not NVMe/GPU sensors.
+    // Component::refresh clears an unreadable Linux temperature to None.
+    if s.sensor_list_at.elapsed() >= Duration::from_secs(30) {
+        s.components = Components::new_with_refreshed_list();
+        s.sensor_list_at = Instant::now();
+    } else {
+        for component in s.components.iter_mut().filter(|c| is_cpu_sensor(c.label())) {
+            component.refresh();
+        }
+    }
+    let cpu_temp = cpu_temp_from(s.components.iter().map(|c| (c.label(), c.temperature())));
 
     let disks = Disks::new_with_refreshed_list();
     let disk_info = disk_list(disks.iter().map(|d| DiskRow {
