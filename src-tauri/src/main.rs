@@ -320,8 +320,11 @@ fn cpu_refresh() -> CpuRefreshKind {
 
 // The process card needs CPU and resident memory, not executable paths, disk IO,
 // command lines or environments. Keep the same process CPU delta and name source.
+// Threads are skipped: on Linux each one is its own /proc/<pid>/task entry, the card
+// discards them anyway, and reading them was most of every sample's cost on a busy box.
+// A process's own CPU and memory already include its threads.
 fn process_refresh() -> ProcessRefreshKind {
-    ProcessRefreshKind::nothing().with_cpu().with_memory()
+    ProcessRefreshKind::nothing().with_cpu().with_memory().without_tasks()
 }
 
 fn new_state() -> AppState {
@@ -756,6 +759,24 @@ mod tests {
         let k = cpu_refresh();
         assert!(k.cpu_usage(), "usage is refreshed");
         assert!(k.frequency(), "clocks are refreshed, not kept from start-up");
+    }
+
+    #[test]
+    fn process_sampling_reads_cpu_and_memory_but_not_threads() {
+        let k = process_refresh();
+        assert!(k.cpu() && k.memory(), "the process card needs CPU and memory");
+        assert!(!k.tasks(), "threads are not read: the card discards them");
+    }
+
+    #[test]
+    fn a_process_refresh_lists_processes_without_their_threads() {
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh());
+        assert!(sys.process(sysinfo::get_current_pid().unwrap()).is_some(), "this test process is listed");
+        assert!(
+            sys.processes().values().all(|p| !matches!(p.thread_kind(), Some(ThreadKind::Userland))),
+            "no thread is listed as a process"
+        );
     }
 
     #[test]

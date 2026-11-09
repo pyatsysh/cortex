@@ -17,7 +17,10 @@ Cortex is the one window: GPU-first telemetry and your TensorBoard together, lig
 ## For training runs
 
 Readings update directly at the selected interval, without animated intermediate
-numbers or gauges. Only the visible view is redrawn, unchanged markup is retained,
+numbers or gauges. The interval starts at two seconds, and one chosen in Settings
+is remembered across restarts. Processes are sampled without enumerating their
+threads, so the cost of a sample does not grow with every thread on the machine.
+Only the visible view is redrawn, unchanged markup is retained,
 and a slow sample cannot queue further samples. A hidden window pauses sampling
 and refreshes when shown again; the charts show the hidden interval as a gap. A
 sample that has not answered for three intervals turns the status from Live to

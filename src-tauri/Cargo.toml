@@ -12,7 +12,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sysinfo = "0.33"
+sysinfo = "0.39"
 
 # NVIDIA GPU stats. Optional so the app still builds/runs on machines without NVML.
 # (utilisation + temperature come from NVML; AMD/Intel GPUs are a later phase.)

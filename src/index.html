@@ -361,8 +361,11 @@
   const ESC = { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" };
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ESC[c]);
 
-  let activeView = "dash", useC = true, intervalMs = 1000, timer = null, last = null, sysinfoText = "", sysInfo = null, aotOn = false;
+  let activeView = "dash", useC = true, intervalMs = 2000, timer = null, last = null, sysinfoText = "", sysInfo = null, aotOn = false;
   try { aotOn = localStorage.getItem("cortex.aot") === "1"; } catch(_){}
+  // A chosen update interval survives a restart; anything the slider could not have set is ignored.
+  const validInterval = v => Number.isInteger(v) && v >= 500 && v <= 10000 && v % 500 === 0;
+  try { const v = Number(localStorage.getItem("cortex.interval")); if (validInterval(v)) intervalMs = v; } catch(_){}
   function setAlwaysOnTop(on){ try { const w = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow(); if (w && w.setAlwaysOnTop) w.setAlwaysOnTop(!!on); } catch(_){} }
 
   // brand mark — connectome brain (matches the app icon)
@@ -451,8 +454,8 @@
       <div class="nrow down"><div class="big nd">0.0</div><div class="meta"><span class="u"><span class="dot"></span>Download</span><small>Mbps</small></div></div></div>`,
       update(el,m){ setHTML(el.querySelector(".nu"), m.net.up.toFixed(1)); setHTML(el.querySelector(".nd"), m.net.down.toFixed(1)); } },
     settings: { title:"Settings", span:1, body: `
-      <div class="field"><div class="k">Update interval &middot; <span class="rateVal">1.0s</span></div>
-        <input type="range" class="slider rateRange" min="500" max="10000" step="500" value="1000"></div>
+      <div class="field"><div class="k">Update interval &middot; <span class="rateVal">2.0s</span></div>
+        <input type="range" class="slider rateRange" min="500" max="10000" step="500" value="2000"></div>
       <div class="field"><div class="k">Cards per row &middot; <span class="colsVal">6</span></div>
         <input type="range" class="slider colsRange" min="3" max="8" step="1" value="6"></div>
       <div class="field"><div class="k">Temperature</div>
@@ -591,6 +594,7 @@
 
   // ---- board delegated interactions (settings live inside a card) ----
   $("#board").addEventListener("input", e=>{ if (e.target.classList.contains("rateRange")){ intervalMs = +e.target.value; loop();
+    try { localStorage.setItem("cortex.interval", String(intervalMs)); } catch(_){}
     document.querySelectorAll(".rateVal").forEach(x=>x.textContent=(intervalMs/1000).toFixed(1)+"s"); }
     else if (e.target.classList.contains("colsRange")){ setCols(+e.target.value);
       document.querySelectorAll(".colsVal").forEach(x=>x.textContent=COLS); } });

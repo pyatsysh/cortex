@@ -52,15 +52,15 @@ async function renderBoard(metrics, sysinfo, options = {}) {
     documentElement: new El(),
     activeElement: null,
   };
-  const store = {};
-  let poll, frames = 0, metricCalls = 0;
+  const store = options.store ?? {};
+  let poll, every, frames = 0, metricCalls = 0;
   const sandbox = {
     document,
     matchMedia: () => ({ matches: false }),
     localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } },
     getComputedStyle: () => ({ getPropertyValue: () => "" }),
     requestAnimationFrame() { frames++; },
-    setInterval: fn => { poll = fn; return 0; },
+    setInterval: (fn, ms) => { poll = fn; every = ms; return 0; },
     clearInterval() {},
     setTimeout: () => 0,
     performance: { now: () => 0 },
@@ -84,6 +84,8 @@ async function renderBoard(metrics, sysinfo, options = {}) {
     card, poll: () => poll(), document,
     get frames() { return frames; },
     get metricCalls() { return metricCalls; },
+    get every() { return every; },
+    store,
     showView: view => modes.find(m => m.dataset.view === view).handlers.click(),
     chartCalls: sel => (byId[sel] ??= new Canvas()).calls,
   };
@@ -233,4 +235,19 @@ test("a sample that never returns makes the status stale until one does", async 
   answer(metrics);
   for (let i = 0; i < 3; i++) await new Promise(r => setImmediate(r));
   assert.equal(dot.title, "Live", "a completed sample restores Live");
+});
+
+test("the update interval starts at two seconds and a chosen one survives a restart", async () => {
+  const board = await renderBoard(metrics, sysinfo);
+  assert.equal(board.every, 2000, "a first launch samples every two seconds");
+  const slider = { classList: { contains: c => c === "rateRange" }, value: "5000" };
+  board.document.querySelector("#board").handlers.input({ target: slider });
+  assert.equal(board.every, 5000, "moving the slider changes the sampling interval");
+  assert.equal(board.store["cortex.interval"], "5000", "and saves it");
+  const again = await renderBoard(metrics, sysinfo, { store: { ...board.store } });
+  assert.equal(again.every, 5000, "the next launch uses the saved interval");
+  for (const bad of ["50", "abc", "20000", "750", ""]) {
+    const b = await renderBoard(metrics, sysinfo, { store: { "cortex.interval": bad } });
+    assert.equal(b.every, 2000, "a saved value the slider could not set is ignored: " + JSON.stringify(bad));
+  }
 });
