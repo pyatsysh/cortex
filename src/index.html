@@ -499,10 +499,10 @@
   function load(key, def, ok){ try { const v = JSON.parse(localStorage.getItem(key)); return ok(v) ? v : def; } catch(_){ return def; } }
   function save(){ try { localStorage.setItem(LS_LAYOUT, JSON.stringify(layout)); localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); localStorage.setItem(LS_COLS, JSON.stringify(COLS)); } catch(_){} }
 
-  function applyCols(){
+  function applyCols(n = COLS){
     // No width cap: the board always fills the window, so slack collapses as the
     // window is resized. Card width follows from the column count.
-    $("#board").style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+    $("#board").style.gridTemplateColumns = `repeat(${n},1fr)`;
   }
   // Slots are absolute indices, so a column change has to re-place every card.
   // Compact the VISIBLE cards into reading order: same left-to-right sequence,
@@ -549,13 +549,18 @@
     const b = $("#board");
     b.querySelectorAll(".slot").forEach(s => s.remove());
     Object.keys(cardEls).forEach(k => { if (!keys.includes(k)){ cardEls[k].remove(); delete cardEls[k]; } });
-    const occ = new Set(); let maxRow = 0;
+    const occ = new Set(); let maxRow = 0, usedCols = 0;
     for (const k of keys){
       if (!cardEls[k]) cardEls[k] = createCard(k);
       const s = layout[k], col = s % COLS, row = Math.floor(s / COLS), sp = cardSpan(k);
       const el = cardEls[k]; el.style.gridColumn = sp === 2 ? `${col + 1} / span 2` : `${col + 1}`; el.style.gridRow = row + 1;
       b.appendChild(el); occ.add(s); if (sp === 2) occ.add(s + 1); if (row > maxRow) maxRow = row;
+      usedCols = Math.max(usedCols, col + sp);
     }
+    // Columns to the right of every card would be a card-wide strip of nothing at any
+    // window size, so the board is only as wide as its cards. Picking a slot shows all
+    // COLS columns again, so a card can still be moved into an empty one.
+    applyCols(pickMode || !usedCols ? COLS : usedCols);
     if (pickMode){
       const span = cardSpan(pickMode);
       for (let i = 0, total = (maxRow + 2) * COLS; i < total; i++){

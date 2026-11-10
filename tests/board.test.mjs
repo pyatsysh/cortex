@@ -251,3 +251,20 @@ test("the update interval starts at two seconds and a chosen one survives a rest
     assert.equal(b.every, 2000, "a saved value the slider could not set is ignored: " + JSON.stringify(bad));
   }
 });
+
+test("the board is only as wide as its cards, and picking a slot shows every column", async () => {
+  const store = {
+    "cortex.cols": "6",
+    "cortex.layout": JSON.stringify({ gpu0: 0, cpu: 1, ram: 2, storage: 3, procs: 4, network: 5, settings: 6 }),
+    "cortex.hidden": JSON.stringify(["network", "settings"]),
+  };
+  const board = await renderBoard(metrics, sysinfo, { store });
+  const columns = () => board.document.querySelector("#board").style.gridTemplateColumns;
+  assert.equal(columns(), "repeat(5,1fr)", "five cards on a six-column board leave no empty column");
+  board.card("cpu").kids[".drag"].handlers.click({ stopPropagation() {} });
+  assert.equal(columns(), "repeat(6,1fr)", "moving a card offers the sixth column");
+  board.card("cpu").kids[".drag"].handlers.click({ stopPropagation() {} });
+  assert.equal(columns(), "repeat(5,1fr)", "and the board closes up again afterwards");
+  const full = await renderBoard(metrics, sysinfo, { store: { ...store, "cortex.hidden": "[]" } });
+  assert.equal(full.document.querySelector("#board").style.gridTemplateColumns, "repeat(6,1fr)", "a full row keeps all six");
+});
