@@ -36,7 +36,7 @@ one logical core, so 25% there is not a quarter of a multicore machine's capacit
 ## What else it does
 
 - **It leaves nothing behind.** The gaming hub it replaces measured 863 MB across 15 background processes on the same machine, running whether or not you opened it. Cortex registers no background services: close the window and nothing of it is left running.
-- **It rearranges to fit your head.** Cards move, hide and drop into empty slots on a grid, and the layout is saved between sessions. Keep the cards you read, close the ones you do not.
+- **It rearranges to fit your head.** Cards move, hide and drop into empty slots on a grid, and the layout is saved between sessions, as are the window's size and place on screen. Keep the cards you read, close the ones you do not.
 - **It has three depths.** A dashboard of ring gauges, a detailed view with per-core tables and live charts, and a system-information sheet you can copy or print.
 
 ## Status

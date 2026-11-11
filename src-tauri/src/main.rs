@@ -7,7 +7,8 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use sysinfo::{Components, CpuRefreshKind, Disks, Networks, ProcessRefreshKind, ProcessesToUpdate, System, ThreadKind};
-use tauri::State;
+use tauri::{Manager, State, WindowEvent};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use nvml_wrapper::enum_wrappers::device::{Clock, TemperatureSensor};
 use nvml_wrapper::Nvml;
@@ -323,6 +324,12 @@ fn cpu_refresh() -> CpuRefreshKind {
 // Threads are skipped: on Linux each one is its own /proc/<pid>/task entry, the card
 // discards them anyway, and reading them was most of every sample's cost on a busy box.
 // A process's own CPU and memory already include its threads.
+// The window opens where and as large as it was left. Visibility and decorations stay as
+// the app sets them, so a window last closed while hidden still opens.
+fn window_state_flags() -> StateFlags {
+    StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED
+}
+
 fn process_refresh() -> ProcessRefreshKind {
     ProcessRefreshKind::nothing().with_cpu().with_memory().without_tasks()
 }
@@ -744,8 +751,16 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(window_state_flags()).build())
         .manage(Mutex::new(new_state()))
         .invoke_handler(tauri::generate_handler![get_metrics, get_sysinfo])
+        .on_window_event(|window, event| {
+            // The plugin writes its file only on a clean exit. Saving whenever the window
+            // loses focus keeps a size set by hand even if Cortex is killed instead of closed.
+            if let WindowEvent::Focused(false) = event {
+                let _ = window.app_handle().save_window_state(window_state_flags());
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running Cortex");
 }
@@ -759,6 +774,13 @@ mod tests {
         let k = cpu_refresh();
         assert!(k.cpu_usage(), "usage is refreshed");
         assert!(k.frequency(), "clocks are refreshed, not kept from start-up");
+    }
+
+    #[test]
+    fn window_keeps_its_size_position_and_maximised_state_only() {
+        let f = window_state_flags();
+        assert!(f.contains(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED));
+        assert!(!f.intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS | StateFlags::FULLSCREEN));
     }
 
     #[test]

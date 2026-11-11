@@ -17,6 +17,7 @@ sysinfo = "0.39"
 # NVIDIA GPU stats. Optional so the app still builds/runs on machines without NVML.
 # (utilisation + temperature come from NVML; AMD/Intel GPUs are a later phase.)
 nvml-wrapper = "0.10"
+tauri-plugin-window-state = "2"
 
 # Windows only: live CPU clock (turbo) via PDH performance counters — the same
 # "base × % performance" figure Task Manager shows. No admin/driver needed.
