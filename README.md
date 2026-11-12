@@ -6,7 +6,7 @@ It is built in Rust on Tauri, so it ships as a native window instead of a bundle
 
 Homepage: <https://pyatsysh.github.io/cortex/>
 
-> Status: built and used on Windows 11. On Linux it builds and its sampler is tested headless under WSL2; the Linux window on a native desktop and the macOS path are not yet proven. See [Status](#status).
+> Status: built and used on Windows 11, and running as a window on a native Linux desktop (Ubuntu 24.04, KDE Plasma on X11). Other Linux desktops and the macOS path are not yet proven. See [Status](#status).
 
 ## Why it exists
 
@@ -41,7 +41,7 @@ one logical core, so 25% there is not a quarter of a multicore machine's capacit
 
 ## Status
 
-So far Cortex has been built and run as a window only on **Windows 11**, developed under WSL. On **Linux** (Ubuntu 24.04, checked under WSL2 on 27 September 2026) it builds, and its sampler is tested without a window: CPU, memory, disks, network and processes come from `/proc` and `/sys`, NVIDIA readings from NVML through the driver's `libnvidia-ml.so.1`, and a missing library, device or sensor reads as N/A rather than zero. The Linux window has not yet been observed on a native desktop, and the macOS path is unproven. Two known gaps on Windows: CPU temperature needs a sensor helper and reads `--` until one is added, and GPU coverage is NVIDIA-only through NVML (AMD and Intel are not read yet).
+Cortex was first built and run as a window on **Windows 11**, developed under WSL. On **Linux** (Ubuntu 24.04) it builds, and its sampler is tested without a window: CPU, memory, disks, network and processes come from `/proc` and `/sys`, NVIDIA readings from NVML through the driver's `libnvidia-ml.so.1`, and a missing library, device or sensor reads as N/A rather than zero. Since 9 November 2026 it has also run as an installed package on a native Ubuntu 24.04 desktop (KDE Plasma on X11, one RTX 3090): the dashboard reads live, GPU and CPU temperature included, and the window reopens at its last size and place after a restart. Wayland and other desktops have not been tried yet, and the macOS path is unproven. Two known gaps on Windows: CPU temperature needs a sensor helper and reads `--` until one is added, and GPU coverage is NVIDIA-only through NVML (AMD and Intel are not read yet).
 
 ## Build
 
@@ -71,15 +71,15 @@ src-tauri/target/release/cortex --probe --samples 5 --interval-ms 1000
 It prints JSON lines: the system report, a list of capabilities (each `available`, `degraded`, `unavailable` or `disabled`, with the reason), then one reading per sample. `CORTEX_NVML_LIB` points it at a particular NVML library. The probe starts no window and no background process, and exits when done.
 
 See [RELEASING.md](RELEASING.md) for locked builds, installer artifacts and
-draft releases. Current Linux GUI evidence is limited to a virtual X display
-in WSL; a native desktop still needs testing.
+draft releases. The Linux window has been checked on one native desktop, KDE
+Plasma on X11; Wayland and other desktops still need testing.
 
 ## Roadmap
 
 - **Now:** the GPU-first card dashboard, the detailed per-core view with live charts, the system-info sheet, and the Training tab with the TensorBoard embed and the alive-or-stalled GPU signal.
 - **Next:** per-process VRAM, so you can see which training process owns which card; alerts for imminent VRAM exhaustion, thermal throttling and a stalled run; the Windows CPU and motherboard temperature helper.
 - **Then:** native ingestion of TensorBoard's scalar files, so loss and accuracy curves sit on the board beside the GPU telemetry with no browser at all; AMD and Intel GPUs; remote monitoring of a headless training box over the network.
-- **Further qualification:** observe the Linux window on a native desktop; establish the macOS build and runtime path. One-line installs (`winget`, `brew`, Flathub) remain proposals. Linux builds already exist; build success alone is not desktop acceptance.
+- **Further qualification:** try the Linux window under Wayland and on other desktops; establish the macOS build and runtime path. One-line installs (`winget`, `brew`, Flathub) remain proposals.
 
 ## Licence
 
